@@ -1,0 +1,19 @@
+//self-made 玩家状态（位置 + 状态栏数值）
+
+namespace Rogue.Core;
+
+/// <summary>玩家。第一步只有位置和状态栏要显示的数值。</summary>
+public sealed class Player
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+
+    public int Hp { get; set; } = 12; //get读取，set写入
+    public int MaxHp { get; set; } = 12;
+    public int Strength { get; set; } = 16;
+    public int Armor { get; set; } = 4;
+    public int Gold { get; set; }
+    public int Experience { get; set; }//经验值
+
+
+}

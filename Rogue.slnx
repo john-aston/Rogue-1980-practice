@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Rogue.Cli/Rogue.Cli.csproj" />
+    <Project Path="src/Rogue.Core/Rogue.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Rogue.Core.Tests/Rogue.Core.Tests.csproj" />
+  </Folder>
+</Solution>
