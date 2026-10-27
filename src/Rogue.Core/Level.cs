@@ -1,10 +1,43 @@
-//地图数据、碰撞、挖房间和走廊，代码顺序仍比较混乱，建议日后按照类型进行分类，统一格式
-
 namespace Rogue.Core;
 
-/// <summary>一层地牢。字符网格，x 是列，y 是行。</summary>
-public sealed class Level //sealed class 不能被继承
+//绘制地牢的规则，提供画布和画笔
+public sealed class Level
 {
+    //外部碰不到、引用本身也不许换，只能在构造函数里 new 一次。
+    private readonly char[,] _tiles;
+    private readonly List<Room> _rooms = new();
+    private readonly HashSet<(int X, int Y)> _secretDoors = new();
+
+    //建一张新地图，先全部填成“石头”，当白纸用。
+    public Level(int width, int height)
+    {
+        Width = width;
+        Height = height;
+        _tiles = new char[height, width];
+        Fill(Tiles.Rock);
+    }
+
+    //地图尺寸建好后固定
+    public int Width { get; }   //对外公开一个建好后就不能改的宽度值，只能读取Level.Width，不能改Level._width
+    public int Height { get; }  //同上
+
+    public IReadOnlyList<Room> Rooms => _rooms;
+    public IReadOnlySet<(int X, int Y)> SecretDoors => _secretDoors;
+
+    /// <summary>楼梯位置；还没放楼梯时是 (-1, -1)。</summary>
+    public (int X, int Y) UpStairs { get; set; } = (-1, -1);
+    public (int X, int Y) DownStairs { get; set; } = (-1, -1);
+
+    public char this[int x, int y] => _tiles[y, x];
+
+    //边界检查
+    public bool InBounds(int x, int y)
+        => x >= 0 && y >= 0 && x < Width && y < Height;
+
+    //可走检查
+    public bool IsWalkable(int x, int y)
+        => InBounds(x, y) && Tiles.IsWalkable(this[x, y]);
+
     public void Fill(char tile)
     {
         for (int y = 0; y < Height; y++)
@@ -16,82 +49,94 @@ public sealed class Level //sealed class 不能被继承
         }
     }
 
-    public bool InBounds(int x, int y) //确认座标在范围内
+    public void Set(int x, int y, char tile)
     {
-        if (x < 0 || y < 0) return false;
-        if (x >= Width || y >= Height) return false;
-        return true;
-    }
-
-    public bool IsWalkable(int x, int y)
-    {
-        if (!InBounds(x, y)) 
-        return false;
-        
-        char c = this[x, y];
-        
-        return c == '.' || c == '>' || c == '<' || c == '+';
-    }
-
-    /// <summary>把一块矩形区域挖成房间地面。</summary>
-    public void CarveRoom(int x, int y, int width, int height)
-    {
-        for (int row = y; row < y + height; row++)
+        if (InBounds(x, y))
         {
-            for (int col = x; col < x + width; col++)
+            _tiles[y, x] = tile;
+        }
+    }
+
+    /// <summary>只把岩石挖成走廊，不覆盖已有的门、地面和楼梯。</summary>
+    public void CarveCorridor(int x, int y)
+    {
+        if (InBounds(x, y) && _tiles[y, x] == Tiles.Rock)
+        {
+            _tiles[y, x] = Tiles.Corridor;
+        }
+    }
+
+    //画一个带墙的房间
+    public void DrawRoom(int x, int y, int width, int height)
+    {
+        for (int col = x; col < x + width; col++)
+        {
+            Set(col, y, Tiles.WallHorizontal);
+            Set(col, y + height - 1, Tiles.WallHorizontal);
+        }
+
+        for (int row = y + 1; row < y + height - 1; row++)
+        {
+            Set(x, row, Tiles.WallVertical);
+            Set(x + width - 1, row, Tiles.WallVertical);
+
+            for (int col = x + 1; col < x + width - 1; col++)
             {
-                Set(col, row, '.');
+                Set(col, row, Tiles.Floor);
             }
         }
     }
 
-    /// <summary>先横后竖的 L 形走廊</summary>
-    public void CarveCorridor(int x1, int y1, int x2, int y2)
+    public void AddRoom(Room room) => _rooms.Add(room);
+
+    /// <summary>玩家站在哪个房间的内部；走廊和门口返回 null。</summary>
+    public Room? RoomAt(int x, int y)
     {
-        for (int x = Math.Min(x1, x2); x <= Math.Max(x1, x2); x++)
+        foreach (Room room in _rooms)
         {
-            Set(x, y1, '.');
+            if (room.ContainsInterior(x, y))
+            {
+                return room;
+            }
         }
 
-        for (int y = Math.Min(y1, y2); y <= Math.Max(y1, y2); y++)
+        return null;
+    }
+
+    public bool IsSecretDoor(int x, int y) => _secretDoors.Contains((x, y));
+
+    /// <summary>把一扇门伪装成墙，并记下它的真实身份。</summary>
+    public void AddSecretDoor(int x, int y, char disguise)
+    {
+        Set(x, y, disguise);
+        _secretDoors.Add((x, y));
+    }
+
+    /// <summary>揭开秘密门。返回是否真的揭开了一扇。</summary>
+    public bool RevealSecretDoor(int x, int y)
+    {
+        if (!_secretDoors.Remove((x, y)))
         {
-            Set(x2, y, '.');
+            return false;
         }
+
+        Set(x, y, Tiles.Door);
+        return true;
     }
 
-
-    private readonly char[,] _tiles; //二维数组，存储地图字符
-
-    public Level(int width, int height)
+    /// <summary>用字符画测试地图，主要给测试用。</summary>
+    public static Level FromAscii(params string[] rows)
     {
-        _tiles = new char[height, width]; //创建二维数组，行数为 height，列数为 width
-        Fill('#'); 
-    }
+        var level = new Level(rows[0].Length, rows.Length);
 
-    public int Width => _tiles.GetLength(1);
-    public int Height => _tiles.GetLength(0);
-
-    /// <summary>读格子。调用方需保证坐标在界内。</summary>
-    public char this[int x,int y] =>_tiles[y,x];
-
-    public void Set(int x, int y , char tile)
-    {
-        if (InBounds(x, y))
+        for (int y = 0; y < rows.Length; y++)
         {
-            _tiles[y,x] = tile;
+            for (int x = 0; x < rows[y].Length; x++)
+            {
+                level.Set(x, y, rows[y][x]);
+            }
         }
-    }
-    
-    //临时关卡
-     public static Level CreateDemo()
-    {
-        var level = new Level(80, 22);
-        level.CarveRoom(2, 2, 14, 6);
-        level.CarveRoom(40, 12, 18, 7);
-        level.CarveCorridor(16, 5, 39, 14);
-        level.Set(14, 6, '>');
+
         return level;
     }
-
-
 }

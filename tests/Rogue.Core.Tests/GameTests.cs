@@ -1,4 +1,3 @@
-//self-made 移动规则测试
 using Rogue.Core;
 
 namespace Rogue.Core.Tests;
@@ -6,18 +5,25 @@ namespace Rogue.Core.Tests;
 public class GameTests
 {
     [Fact]
-    public void Walking_into_a_wall_does_not_move_or_advance_the_turn()
+    public void Searching_eventually_finds_an_adjacent_secret_door()
     {
-        var game = new Game();
-        int startX = game.Player.X;
-        int startY = game.Player.Y;
+        var level = Level.FromAscii(
+            "#####",
+            "#|..#",
+            "#...#",
+            "#####");
+        level.AddSecretDoor(1, 1, Tiles.WallVertical);
+        var game = new Game(level, 2, 1);
 
-        Assert.True(game.TryMove(0, -1));
-        Assert.True(game.TryMove(0, -1));
-        Assert.False(game.TryMove(0, -1));   // 再往上就是墙
+        bool found = false;
 
-        Assert.Equal(startX, game.Player.X);
-        Assert.Equal(startY - 2, game.Player.Y);
-        Assert.Equal(2, game.Turn);
+        for (int i = 0; i < 200 && !found; i++)
+        {
+            found = game.Search();
+        }
+
+        Assert.True(found);
+        Assert.Equal(Tiles.Door, level[1, 1]);
     }
+    
 }

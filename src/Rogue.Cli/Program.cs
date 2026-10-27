@@ -36,7 +36,7 @@ internal static class Program
     {
         var screen = new Screen();
         var game = new Game();
-        string message = "Arrows or hjklyubn to move. Esc to quit.";
+        string message = "Move: arrows / hjklyubn. Search: s. Quit: Esc.";
 
         while (true)
         {
@@ -44,9 +44,18 @@ internal static class Program
 
             ConsoleKeyInfo key = Console.ReadKey(intercept: true);
 
-            if (key.Key == ConsoleKey.Escape|| (key.Modifiers.HasFlag(ConsoleModifiers.Control) && key.Key is ConsoleKey.C or ConsoleKey.Q))
+            if (key.Key == ConsoleKey.Escape
+                || (key.Modifiers.HasFlag(ConsoleModifiers.Control) && key.Key is ConsoleKey.C or ConsoleKey.Q))
             {
                 return;
+            }
+
+            if (key.KeyChar is 's' or 'S')
+            {
+                message = game.Search()
+                    ? "You found a secret door!"
+                    : "You search but find nothing.";
+                continue;
             }
 
             (int dx, int dy)? direction = ReadDirection(key);
@@ -56,9 +65,20 @@ internal static class Program
             }
 
             (int dx, int dy) = direction.Value;
-            message = game.TryMove(dx, dy)
-                ? "You step forward."
-                : "You bump into a wall.";
+
+            if (game.TryMove(dx, dy))
+            {
+                message = game.Map[game.Player.X, game.Player.Y] switch
+                {
+                    Tiles.StairsDown => "You see a staircase leading down.",
+                    Tiles.StairsUp => "You see a staircase leading up.",
+                    _ => "You step forward.",
+                };
+            }
+            else
+            {
+                message = "You bump into a wall.";
+            }
         }
     }
 
@@ -71,8 +91,15 @@ internal static class Program
         {
             for (int x = 0; x < game.Map.Width; x++)
             {
+                if (!game.Sight.IsSeen(x, y))
+                {
+                    continue;   // 没见过的地方保持空白
+                }
+
                 char tile = game.Map[x, y];
-                screen.Put(x, y + 1, tile, TileColor(tile));
+                bool visible = game.Sight.IsVisible(x, y);
+
+                screen.Put(x, y + 1, tile, visible ? TileColor(tile) : DimColor(tile));
             }
         }
 
@@ -80,7 +107,7 @@ internal static class Program
 
         Player player = game.Player;
         string status =
-            $"Level: 1  Gold: {player.Gold}  Hp: {player.Hp}({player.MaxHp})  " +
+            $"Level: {game.LevelNumber}  Gold: {player.Gold}  Hp: {player.Hp}({player.MaxHp})  " +
             $"Str: {player.Strength}  Arm: {player.Armor}  Exp: {player.Experience}  Turn: {game.Turn}";
 
         screen.Write(0, 0, status, ConsoleColor.Gray);
@@ -91,10 +118,19 @@ internal static class Program
 
     private static ConsoleColor TileColor(char tile) => tile switch
     {
-        '#' => ConsoleColor.DarkGray,
-        '+' => ConsoleColor.DarkYellow,
-        '>' or '<' => ConsoleColor.Yellow,
+        Tiles.WallHorizontal or Tiles.WallVertical => ConsoleColor.Gray,
+        Tiles.Floor => ConsoleColor.Gray,
+        Tiles.Corridor => ConsoleColor.DarkGray,
+        Tiles.Door => ConsoleColor.DarkYellow,
+        Tiles.StairsDown or Tiles.StairsUp => ConsoleColor.Yellow,
         _ => ConsoleColor.Gray,
+    };
+
+    /// <summary>记忆里的东西用暗色画。</summary>
+    private static ConsoleColor DimColor(char tile) => tile switch
+    {
+        Tiles.Door or Tiles.StairsDown or Tiles.StairsUp => ConsoleColor.DarkYellow,
+        _ => ConsoleColor.DarkGray,
     };
 
     private static (int dx, int dy)? ReadDirection(ConsoleKeyInfo key)
