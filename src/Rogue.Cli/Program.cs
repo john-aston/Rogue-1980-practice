@@ -1,4 +1,4 @@
-﻿using Rogue.Core;
+using Rogue.Core;
 
 namespace Rogue.Cli;
 
@@ -36,7 +36,7 @@ internal static class Program
     {
         var screen = new Screen();
         var game = new Game();
-        string message = "Move: arrows / hjklyubn. Search: s. Quit: Esc.";
+        string message = "Move: arrows / hjklyubn. Search: s. Stairs: < >. Quit: Esc.";
 
         while (true)
         {
@@ -55,6 +55,22 @@ internal static class Program
                 message = game.Search()
                     ? "You found a secret door!"
                     : "You search but find nothing.";
+                continue;
+            }
+
+            if (key.KeyChar == '>')
+            {
+                message = game.TryDescend()
+                    ? $"You descend to level {game.LevelNumber}."
+                    : "You can't go down here.";
+                continue;
+            }
+
+            if (key.KeyChar == '<')
+            {
+                message = game.TryAscend()
+                    ? $"You climb to level {game.LevelNumber}."
+                    : "You can't go up here.";
                 continue;
             }
 
