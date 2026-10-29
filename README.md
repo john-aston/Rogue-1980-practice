@@ -46,14 +46,42 @@ dotnet run --project src/Rogue.Cli
 
 ```text
 Rogue/
+├── global.json                  # 锁定 .NET SDK 版本（10.0.401）
+├── Rogue.slnx                   # 解决方案：只是一份“项目清单”
+├── Directory.Build.props        # 所有项目共享的 MSBuild 设置（目前是空的）
+├── .editorconfig                # 代码风格规则（缩进、命名、大括号位置…）
+├── .gitignore                   # 哪些文件不要进 git
+├── LICENSE                      # MIT
+│
 ├── src/
-│   ├── Rogue.Core/          # 游戏规则：地图、玩家、移动（不引用 Console）
-│   └── Rogue.Cli/           # 终端界面：帧缓冲、输入、主循环
+│   ├── Rogue.Core/              # ★ 规则层：不依赖 Console
+│   │   ├── Tile.cs              # 地图字符常量 + 可走判定
+│   │   ├── Level.cs             # 地图数据、画房间、挖走廊
+│   │   ├── LevelGenerator.cs    # 3×3 扇区随机生成
+│   │   ├── Player.cs            # 玩家数据（坐标、HP…）
+│   │   ├── Game.cs              # 把上面几个组合起来，提供 TryMove
+│   │   ├── Rogue.Core.csproj    # 项目定义
+│   │   ├── bin/                 # ← 生成
+│   │   └── obj/                 # ← 生成
+│   │
+│   └── Rogue.Cli/               # ★ 界面层：只负责终端
+│       ├── Program.cs           # 主循环、读键、调 Draw
+│       ├── Screen.cs            # 80×24 帧缓冲 + ANSI 差分输出
+│       ├── Rogue.Cli.csproj     # 项目定义（引用 Core）
+│       ├── bin/                 # ← 生成（这里面的东西才是“能跑的”）
+│       └── obj/                 # ← 生成
+│
 ├── tests/
-│   └── Rogue.Core.Tests/    # xUnit 测试
-├── Directory.Build.props
-├── Rogue.slnx
-└── global.json
+│   └── Rogue.Core.Tests/
+│       ├── LevelTest.cs         # Level 的测试
+│       ├── LevelGenerateTest.cs # 生成器的测试（种子、连通性）
+│       ├── GameTests.cs         # 移动规则测试
+│       ├── UnitTest1.cs         # 模板残留的空测试
+│       ├── Rogue.Core.Tests.csproj
+│       ├── bin/                 # ← 生成（5.2M，因为把测试框架也复制进来了）
+│       └── obj/                 # ← 生成
+│
+└── .git/                        # 版本库内部数据（不是“项目文件”）
 ```
 
 ## 设计说明
