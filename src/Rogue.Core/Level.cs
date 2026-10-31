@@ -7,6 +7,10 @@ public sealed class Level
     private readonly char[,] _tiles;
     private readonly List<Room> _rooms = new();
     private readonly HashSet<(int X, int Y)> _secretDoors = new();
+    private readonly List<Item> _items = new();
+    private readonly List<Monster> _monsters = new();
+    public IReadOnlyList<Monster> Monsters => _monsters;
+    public IReadOnlyList<Item> Items => _items;
 
     //建一张新地图，先全部填成“石头”，当白纸用。
     public Level(int width, int height)
@@ -122,6 +126,39 @@ public sealed class Level
 
         Set(x, y, Tiles.Door);
         return true;
+    }
+    public void AddMonster(Monster monster) => _monsters.Add(monster);
+
+    public void RemoveMonster(Monster monster) => _monsters.Remove(monster);
+
+    public Monster? MonsterAt(int x, int y)
+    {
+        foreach (Monster monster in _monsters)
+        {
+            if (monster.X == x && monster.Y == y)
+            {
+                return monster;
+            }
+        }
+
+        return null;
+    }
+
+        public void AddItem(Item item) => _items.Add(item);
+
+    public void RemoveItem(Item item) => _items.Remove(item);
+
+    public Item? ItemAt(int x, int y)
+    {
+        foreach (Item item in _items)
+        {
+            if (item.X == x && item.Y == y)
+            {
+                return item;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>用字符画测试地图，主要给测试用。</summary>

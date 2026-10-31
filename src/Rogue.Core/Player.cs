@@ -9,10 +9,16 @@ public sealed class Player
 
     public int Hp { get; set; } = 12;   //get读取，set写入
     public int MaxHp { get; set; } = 12;
+    public int Level { get; set; } = 1;
     public int Strength { get; set; } = 16;
     public int Armor { get; set; } = 4;
     public int Gold { get; set; }
-    public int Experience { get; set; }  //经验值
+    public int Experience { get; set; }
+
+    public List<Item> Inventory { get; } = new();
+    public Item? Weapon { get; set; }
+    public Item? WornArmor { get; set; }
+    public int Food { get; set; } = 500;
 
 
 }

@@ -61,4 +61,19 @@ public sealed class Visibility
         _visible[y, x] = true;
         _seen[y, x] = true;
     }
+
+    /// <summary>魔法地图：把整层的地形都标成“看过”。</summary>
+    public void RevealAll()
+    {
+        for (int y = 0; y < _level.Height; y++)
+        {
+            for (int x = 0; x < _level.Width; x++)
+            {
+                if (_level[x, y] != Tiles.Rock)
+                {
+                    _seen[y, x] = true;
+                }
+            }
+        }
+    }
 }
