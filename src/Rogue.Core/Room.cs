@@ -3,6 +3,8 @@ namespace Rogue.Core;
 //一个矩形的房间，坐标包含四周的墙
 public sealed class Room
 {
+
+    //房间坐标包含四周墙；`isDark` 决定是否整间点亮
     public Room(int x, int y, int width, int height, bool isDark)
     {
         X = x;
@@ -12,6 +14,7 @@ public sealed class Room
         IsDark = isDark;
     }
 
+    // 右/下边界与中心点，生成走廊和放楼梯时用
     public int X { get; }
     public int Y { get; }
     public int Width { get; }
@@ -28,7 +31,7 @@ public sealed class Room
     public bool Contains(int x, int y)
         => x >= X && x <= Right && y >= Y && y <= Bottom;
 
-    //只算能站人的内部地面
+    //只算内部地面（玩家站的地方），`RoomAt` 用它
     public bool ContainsInterior(int x, int y)
         => x > X && x < Right && y > Y && y < Bottom;
 }

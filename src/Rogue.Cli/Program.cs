@@ -38,7 +38,28 @@ internal static class Program
     private static void Run()
     {
         var screen = new Screen();
-        var game = new Game();
+        var store = new SaveStore();
+
+        Game game;
+
+        if (store.TryLoad(out SaveData? save))
+        {
+            try
+            {
+                game = Game.Restore(save!);
+                store.DeleteSave();
+                game.Notify("Welcome back.");
+            }
+            catch (Exception)
+            {
+                store.DeleteSave();
+                game = new Game();
+            }
+        }
+        else
+        {
+            game = new Game();
+        }
 
         while (true)
         {
@@ -49,6 +70,18 @@ internal static class Program
             if (key.Key == ConsoleKey.Escape
                 || (key.Modifiers.HasFlag(ConsoleModifiers.Control) && key.Key is ConsoleKey.C or ConsoleKey.Q))
             {
+                if (!game.IsDead && !game.IsWon)
+                {
+                    try
+                    {
+                        store.Save(game.Snapshot());
+                    }
+                    catch (Exception)
+                    {
+                        // 存档失败不应该阻止退出
+                    }
+                }
+
                 return;
             }
 
@@ -140,15 +173,74 @@ internal static class Program
                 game.TryMove(dx, dy);
             }
 
+            if (game.IsWon)
+            {
+                Finish(store, game, won: true);
+                return;
+            }
+
             if (game.IsDead)
             {
-                Draw(screen, game);
-                screen.Write(0, 23, game.Message, ConsoleColor.Red);
-                screen.Present();
-                Console.ReadKey(intercept: true);
+                Finish(store, game, won: false);
                 return;
             }
         }
+    }
+
+    private static void Finish(SaveStore store, Game game, bool won)
+    {
+        try
+        {
+            store.DeleteSave();
+        }
+        catch (Exception)
+        {
+        }
+
+        var entry = new ScoreEntry
+        {
+            Name = Environment.UserName,
+            Score = game.Score,
+            Level = game.LevelNumber,
+            Gold = game.Player.Gold,
+            Experience = game.Player.Experience,
+            Won = won,
+            Date = DateTime.Now.ToString("yyyy-MM-dd"),
+        };
+
+        List<ScoreEntry> scores;
+
+        try
+        {
+            scores = store.AddScore(entry);
+        }
+        catch (Exception)
+        {
+            scores = new List<ScoreEntry> { entry };
+        }
+
+        RestoreTerminal();
+
+        Console.WriteLine();
+        Console.WriteLine(won
+            ? "You escaped the Dungeon of Doom with the Amulet of Yendor!"
+            : game.Message);
+        Console.WriteLine();
+        Console.WriteLine($"Score: {entry.Score}   Gold: {entry.Gold}   Exp: {entry.Experience}   Depth: {entry.Level}");
+        Console.WriteLine();
+        Console.WriteLine("High scores");
+        Console.WriteLine("-----------");
+
+        for (int i = 0; i < scores.Count; i++)
+        {
+            ScoreEntry score = scores[i];
+            string mark = score.Won ? "escaped" : $"level {score.Level}";
+            Console.WriteLine($"{i + 1,2}. {score.Name,-12} {score.Score,6}  {mark}");
+        }
+
+        Console.WriteLine();
+        Console.Write("Press any key to exit.");
+        Console.ReadKey(intercept: true);
     }
 
     private static void Draw(Screen screen, Game game)
@@ -179,6 +271,16 @@ internal static class Program
             }
 
             screen.Put(item.X, item.Y + 1, item.Symbol, ItemColor(item));
+        }
+
+        foreach (Trap trap in game.Map.Traps)
+        {
+            if (!trap.IsFound || !game.Sight.IsVisible(trap.X, trap.Y))
+            {
+                continue;
+            }
+
+            screen.Put(trap.X, trap.Y + 1, '^', ConsoleColor.DarkRed);
         }
 
         foreach (Monster monster in game.Map.Monsters)
@@ -279,6 +381,7 @@ internal static class Program
         ItemKind.Potion => ConsoleColor.Magenta,
         ItemKind.Scroll => ConsoleColor.White,
         ItemKind.Food => ConsoleColor.DarkYellow,
+        ItemKind.Amulet => ConsoleColor.Yellow,
         _ => ConsoleColor.Gray,
     };
 

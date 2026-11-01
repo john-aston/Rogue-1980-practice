@@ -1,5 +1,9 @@
 namespace Rogue.Core;
+/// <summary>
+/// 这部分是用来存放物品信息的
+/// </summary>
 
+//药水/卷轴/食物/武器/护甲/金币/Amulet
 public enum ItemKind
 {
     Potion,
@@ -8,6 +12,7 @@ public enum ItemKind
     Weapon,
     Armor,
     Gold,
+    Amulet,
 }
 
 public enum PotionType
@@ -17,14 +22,14 @@ public enum PotionType
     Poison,
     Experience,
 }
-
+//鉴定/传送/魔法地图
 public enum ScrollType
 {
     Identify,
     Teleport,
     MagicMapping,
 }
-
+//符号、真名、坐标
 public sealed class Item
 {
     public Item(ItemKind kind, char symbol, string name, int x, int y)
@@ -77,6 +82,9 @@ public sealed class Item
 
     public static Item CreateGold(int amount, int x, int y)
         => new Item(ItemKind.Gold, '*', "gold", x, y) { GoldAmount = amount };
+
+    public static Item CreateAmulet(int x, int y)
+        => new Item(ItemKind.Amulet, ',', "Amulet of Yendor", x, y);
 
     public static string PotionName(PotionType type) => type switch
     {

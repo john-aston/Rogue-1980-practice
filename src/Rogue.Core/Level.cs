@@ -9,8 +9,10 @@ public sealed class Level
     private readonly HashSet<(int X, int Y)> _secretDoors = new();
     private readonly List<Item> _items = new();
     private readonly List<Monster> _monsters = new();
+    private readonly List<Trap> _traps = new();
     public IReadOnlyList<Monster> Monsters => _monsters;
     public IReadOnlyList<Item> Items => _items;
+    public IReadOnlyList<Trap> Traps => _traps;
 
     //建一张新地图，先全部填成“石头”，当白纸用。
     public Level(int width, int height)
@@ -155,6 +157,23 @@ public sealed class Level
             if (item.X == x && item.Y == y)
             {
                 return item;
+            }
+        }
+
+        return null;
+    }
+
+    public void AddTrap(Trap trap) => _traps.Add(trap);
+
+    public void RemoveTrap(Trap trap) => _traps.Remove(trap);
+
+    public Trap? TrapAt(int x, int y)
+    {
+        foreach (Trap trap in _traps)
+        {
+            if (trap.X == x && trap.Y == y)
+            {
+                return trap;
             }
         }
 

@@ -12,6 +12,9 @@ public sealed class Game
     private readonly int _seed;
     private readonly Dictionary<int, DungeonLevel> _levels = new();
     private readonly List<string> _messages = new();
+    private bool _hungryShown;
+    private bool _weakShown;
+    private string? _deathCause;
     private DungeonLevel _current;
 
     public Player Player { get; }
@@ -19,6 +22,10 @@ public sealed class Game
     public int Turn { get; private set; }
     public int LevelNumber { get; private set; }
     public bool IsDead => Player.Hp <= 0;
+    public bool IsWon { get; private set; }
+
+    public int Score =>
+        Player.Gold + Player.Experience + LevelNumber * 10 + (Player.HasAmulet ? 1000 : 0);
 
     public Level Map => _current.Map;
     public Visibility Sight => _current.Sight;
@@ -87,6 +94,22 @@ public sealed class Game
             Map.RemoveItem(here);
             Player.Gold += here.GoldAmount;
             AddMessage($"You pick up {here.GoldAmount} gold.");
+        }
+
+        Trap? trap = Map.TrapAt(Player.X, Player.Y);
+
+        if (trap is not null && TriggerTrap(trap))
+        {
+            // 掉到下一层：这一回合不再让怪物行动
+            Turn++;
+            HungerTick();
+
+            if (IsDead)
+            {
+                AddDeathMessage();
+            }
+
+            return true;
         }
 
         EndTurn();
@@ -245,6 +268,17 @@ public sealed class Game
 
         Player.Inventory.RemoveAt(index);
         Player.Food += item.Nutrition;
+
+        if (Player.Food > 300)
+        {
+            _hungryShown = false;
+            _weakShown = false;
+        }
+        else if (Player.Food > 0)
+        {
+            _weakShown = false;
+        }
+
         AddMessage("You eat the food.");
         EndTurn();
         return true;
@@ -344,7 +378,8 @@ public sealed class Game
     public bool Search()
     {
         _messages.Clear();
-        bool found = false;
+        bool foundDoor = false;
+        bool foundTrap = false;
 
         for (int dy = -1; dy <= 1; dy++)
         {
@@ -358,24 +393,37 @@ public sealed class Game
                 int x = Player.X + dx;
                 int y = Player.Y + dy;
 
-                if (!Map.IsSecretDoor(x, y))
+                if (Map.IsSecretDoor(x, y) && _rng.Next(5) == 0)
                 {
-                    continue;
+                    Map.RevealSecretDoor(x, y);
+                    foundDoor = true;
                 }
 
-                if (_rng.Next(5) != 0)
-                {
-                    continue;
-                }
+                Trap? trap = Map.TrapAt(x, y);
 
-                Map.RevealSecretDoor(x, y);
-                found = true;
+                if (trap is { IsFound: false } && _rng.Next(2) == 0)
+                {
+                    trap.IsFound = true;
+                    foundTrap = true;
+                }
             }
         }
 
-        AddMessage(found ? "You found a secret door!" : "You search but find nothing.");
+        if (foundDoor)
+        {
+            AddMessage("You found a secret door!");
+        }
+        else if (foundTrap)
+        {
+            AddMessage("You found a trap!");
+        }
+        else
+        {
+            AddMessage("You search but find nothing.");
+        }
+
         EndTurn();
-        return found;
+        return foundDoor || foundTrap;
     }
 
     public bool TryDescend()
@@ -399,9 +447,24 @@ public sealed class Game
     {
         _messages.Clear();
 
-        if (Map[Player.X, Player.Y] != Tiles.StairsUp || LevelNumber <= 1)
+        if (Map[Player.X, Player.Y] != Tiles.StairsUp)
         {
             AddMessage("You can't go up here.");
+            return false;
+        }
+
+        if (LevelNumber <= 1)
+        {
+            if (Player.HasAmulet)
+            {
+                IsWon = true;
+                AddMessage("You escape the Dungeon of Doom with the Amulet of Yendor!");
+            }
+            else
+            {
+                AddMessage("You can't go up here.");
+            }
+
             return false;
         }
 
@@ -479,14 +542,113 @@ public sealed class Game
         }
     }
 
+    private bool TriggerTrap(Trap trap)
+    {
+        Map.RemoveTrap(trap);
+
+        switch (trap.Type)
+        {
+            case TrapType.TrapDoor:
+                if (LevelNumber >= MaxDepth)
+                {
+                    Player.Hp -= Dice.Roll(1, 6, _rng);
+                    AddMessage("You fall, but there is nowhere to go.");
+                    return false;
+                }
+
+                LevelNumber++;
+                _current = LoadLevel(LevelNumber);
+                MovePlayerTo(_current.Map.UpStairs);
+                AddMessage($"You fall through a trap door to level {LevelNumber}!");
+                return true;
+
+            case TrapType.Arrow:
+                if (_rng.Next(2) == 0)
+                {
+                    int damage = Dice.Roll(1, 6, _rng);
+                    Player.Hp -= damage;
+                    AddMessage($"An arrow hits you for {damage}.");
+
+                    if (Player.Hp <= 0)
+                    {
+                        _deathCause = "an arrow";
+                    }
+                }
+                else
+                {
+                    AddMessage("An arrow flies past you.");
+                }
+
+                return false;
+
+            case TrapType.PoisonNeedle:
+            {
+                int damage = Dice.Roll(1, 4, _rng);
+                Player.Hp -= damage;
+                AddMessage($"A poison needle pricks you for {damage}.");
+
+                if (Player.Hp <= 0)
+                {
+                    _deathCause = "poison";
+                }
+
+                return false;
+            }
+
+            case TrapType.Teleport:
+                TeleportPlayer();
+                AddMessage("You are teleported.");
+                return false;
+
+            default:
+                return false;
+        }
+    }
+
+    private void HungerTick()
+    {
+        Player.Food--;
+
+        if (Player.Food <= 300 && !_hungryShown)
+        {
+            AddMessage("You are hungry.");
+            _hungryShown = true;
+        }
+
+        if (Player.Food <= 0 && !_weakShown)
+        {
+            AddMessage("You are weak.");
+            _weakShown = true;
+        }
+
+        if (Player.Food <= -200)
+        {
+            _deathCause = "starvation";
+            AddMessage("You faint from lack of food.");
+            Player.Hp = 0;
+        }
+    }
+
+    private void AddDeathMessage()
+    {
+        AddMessage(_deathCause is null
+            ? $"You die on level {LevelNumber}."
+            : $"You die of {_deathCause}.");
+    }
+
     private void EndTurn()
     {
         Turn++;
-        MonstersAct();
+        HungerTick();
+
+        if (!IsDead)
+        {
+            MonstersAct();
+        }
 
         if (IsDead)
         {
-            AddMessage($"You die on level {LevelNumber}.");
+            AddDeathMessage();
         }
     }
 
@@ -672,8 +834,300 @@ public sealed class Game
         var itemRng = new Random(LevelSeed(number) ^ 0x51ed270b);
         ItemSpawner.Populate(map, number, Knowledge, itemRng);
 
+        var trapRng = new Random(LevelSeed(number) ^ 0x6a09e667);
+        TrapSpawner.Populate(map, number, trapRng);
+
+        if (number == MaxDepth)
+        {
+            PlaceAmulet(map, new Random(LevelSeed(number) ^ 0x3c6ef372));
+        }
+
         var state = new DungeonLevel(map);
         _levels[number] = state;
+        return state;
+    }
+
+    private static void PlaceAmulet(Level level, Random rng)
+    {
+        foreach (Room room in level.Rooms)
+        {
+            if (room.ContainsInterior(level.UpStairs.X, level.UpStairs.Y))
+            {
+                continue;
+            }
+
+            for (int attempt = 0; attempt < 20; attempt++)
+            {
+                int x = rng.Next(room.X + 1, room.Right);
+                int y = rng.Next(room.Y + 1, room.Bottom);
+
+                if (!level.IsWalkable(x, y))
+                {
+                    continue;
+                }
+
+                if (level[x, y] is Tiles.StairsUp or Tiles.StairsDown)
+                {
+                    continue;
+                }
+
+                if (level.ItemAt(x, y) is not null
+                    || level.MonsterAt(x, y) is not null
+                    || level.TrapAt(x, y) is not null)
+                {
+                    continue;
+                }
+
+                level.AddItem(Item.CreateAmulet(x, y));
+                return;
+            }
+        }
+    }
+
+    /// <summary>把当前这一局压成可序列化的数据。</summary>
+    public SaveData Snapshot()
+    {
+        var data = new SaveData
+        {
+            Seed = _seed,
+            Turn = Turn,
+            LevelNumber = LevelNumber,
+            Knowledge = Knowledge.Snapshot(),
+            Player = new PlayerData
+            {
+                X = Player.X,
+                Y = Player.Y,
+                Hp = Player.Hp,
+                MaxHp = Player.MaxHp,
+                Level = Player.Level,
+                Strength = Player.Strength,
+                Armor = Player.Armor,
+                Gold = Player.Gold,
+                Experience = Player.Experience,
+                Food = Player.Food,
+                Inventory = Player.Inventory.Select(ItemData.From).ToList(),
+                Weapon = Player.Weapon is null ? null : ItemData.From(Player.Weapon),
+                WornArmor = Player.WornArmor is null ? null : ItemData.From(Player.WornArmor),
+            },
+        };
+
+        foreach (int number in _levels.Keys.OrderBy(key => key))
+        {
+            data.Levels.Add(SnapshotLevel(number, _levels[number]));
+        }
+
+        return data;
+    }
+
+    public static Game Restore(SaveData data)
+    {
+        if (data.Version != SaveData.CurrentVersion)
+        {
+            throw new InvalidOperationException("Unsupported save version.");
+        }
+
+        return new Game(data);
+    }
+
+    private Game(SaveData data)
+    {
+        _seed = data.Seed;
+        _rng = new Random(unchecked(data.Seed ^ (data.Turn * 7919)));
+
+        Knowledge = ItemKnowledge.Restore(data.Knowledge);
+
+        Player = new Player
+        {
+            X = data.Player.X,
+            Y = data.Player.Y,
+            Hp = data.Player.Hp,
+            MaxHp = data.Player.MaxHp,
+            Level = data.Player.Level,
+            Strength = data.Player.Strength,
+            Armor = data.Player.Armor,
+            Gold = data.Player.Gold,
+            Experience = data.Player.Experience,
+            Food = data.Player.Food,
+        };
+
+        foreach (ItemData item in data.Player.Inventory)
+        {
+            Player.Inventory.Add(item.ToItem());
+        }
+
+        if (data.Player.Weapon is not null)
+        {
+            Player.Weapon = data.Player.Weapon.ToItem();
+        }
+
+        if (data.Player.WornArmor is not null)
+        {
+            Player.WornArmor = data.Player.WornArmor.ToItem();
+        }
+
+        foreach (LevelData level in data.Levels)
+        {
+            _levels[level.Number] = BuildLevel(level);
+        }
+
+        if (!_levels.TryGetValue(data.LevelNumber, out DungeonLevel? current))
+        {
+            throw new InvalidOperationException("Save file is missing the current level.");
+        }
+
+        LevelNumber = data.LevelNumber;
+        Turn = data.Turn;
+        _current = current;
+        _current.Sight.Update(Player.X, Player.Y);
+
+        _hungryShown = Player.Food <= 300;
+        _weakShown = Player.Food <= 0;
+    }
+
+    private static LevelData SnapshotLevel(int number, DungeonLevel state)
+    {
+        Level level = state.Map;
+        var rows = new string[level.Height];
+
+        for (int y = 0; y < level.Height; y++)
+        {
+            var chars = new char[level.Width];
+
+            for (int x = 0; x < level.Width; x++)
+            {
+                chars[x] = level[x, y];
+            }
+
+            rows[y] = new string(chars);
+        }
+
+        var data = new LevelData
+        {
+            Number = number,
+            Width = level.Width,
+            Height = level.Height,
+            Rows = rows,
+            UpStairsX = level.UpStairs.X,
+            UpStairsY = level.UpStairs.Y,
+            DownStairsX = level.DownStairs.X,
+            DownStairsY = level.DownStairs.Y,
+            Seen = state.Sight.SnapshotSeen(),
+        };
+
+        foreach (Room room in level.Rooms)
+        {
+            data.Rooms.Add(new RoomData
+            {
+                X = room.X,
+                Y = room.Y,
+                Width = room.Width,
+                Height = room.Height,
+                IsDark = room.IsDark,
+            });
+        }
+
+        foreach ((int x, int y) in level.SecretDoors)
+        {
+            data.SecretDoors.Add(new SecretDoorData
+            {
+                X = x,
+                Y = y,
+                Disguise = level[x, y],
+            });
+        }
+
+        foreach (Monster monster in level.Monsters)
+        {
+            data.Monsters.Add(new MonsterData
+            {
+                Symbol = monster.Definition.Symbol,
+                X = monster.X,
+                Y = monster.Y,
+                Hp = monster.Hp,
+                IsAwake = monster.IsAwake,
+            });
+        }
+
+        foreach (Item item in level.Items)
+        {
+            data.Items.Add(ItemData.From(item));
+        }
+
+        foreach (Trap trap in level.Traps)
+        {
+            data.Traps.Add(new TrapData
+            {
+                Type = trap.Type,
+                X = trap.X,
+                Y = trap.Y,
+                IsFound = trap.IsFound,
+            });
+        }
+
+        return data;
+    }
+
+    private static DungeonLevel BuildLevel(LevelData data)
+    {
+        var level = new Level(data.Width, data.Height);
+
+        for (int y = 0; y < data.Height; y++)
+        {
+            for (int x = 0; x < data.Width; x++)
+            {
+                level.Set(x, y, data.Rows[y][x]);
+            }
+        }
+
+        foreach (RoomData room in data.Rooms)
+        {
+            level.AddRoom(new Room(room.X, room.Y, room.Width, room.Height, room.IsDark));
+        }
+
+        level.UpStairs = (data.UpStairsX, data.UpStairsY);
+        level.DownStairs = (data.DownStairsX, data.DownStairsY);
+
+        foreach (SecretDoorData door in data.SecretDoors)
+        {
+            level.AddSecretDoor(door.X, door.Y, door.Disguise);
+        }
+
+        foreach (MonsterData saved in data.Monsters)
+        {
+            MonsterDefinition? definition = null;
+
+            foreach (MonsterDefinition candidate in MonsterTable.All)
+            {
+                if (candidate.Symbol == saved.Symbol)
+                {
+                    definition = candidate;
+                    break;
+                }
+            }
+
+            if (definition is null)
+            {
+                continue;
+            }
+
+            level.AddMonster(new Monster(definition, saved.X, saved.Y, saved.Hp)
+            {
+                IsAwake = saved.IsAwake,
+            });
+        }
+
+        foreach (ItemData item in data.Items)
+        {
+            level.AddItem(item.ToItem());
+        }
+
+        foreach (TrapData trap in data.Traps)
+        {
+            level.AddTrap(new Trap(trap.Type, trap.X, trap.Y) { IsFound = trap.IsFound });
+        }
+
+        var state = new DungeonLevel(level);
+        state.Sight.RestoreSeen(data.Seen);
         return state;
     }
 

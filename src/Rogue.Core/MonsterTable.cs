@@ -1,6 +1,7 @@
 namespace Rogue.Core;
 
 /// <summary>原版 a–z 的怪物表。</summary>
+/// 26 个字母怪物的静态表
 public static class MonsterTable
 {
     public static readonly MonsterDefinition[] All =
@@ -34,6 +35,7 @@ public static class MonsterTable
     };
 
     /// <summary>按地牢深度挑一只：只出现等级不超过深度的怪。</summary>
+    /// 怪本身只会出现在特定的深度
     public static MonsterDefinition Pick(int depth, Random rng)
     {
         var candidates = new List<MonsterDefinition>();

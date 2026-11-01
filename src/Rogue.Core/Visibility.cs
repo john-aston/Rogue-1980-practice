@@ -1,6 +1,6 @@
 namespace Rogue.Core;
 
-//视野与记忆：Visible 是现在能看到的，Seen 是曾经看到过的
+//玩家能看什么
 public sealed class Visibility
 {
     private readonly Level _level;
@@ -60,6 +60,39 @@ public sealed class Visibility
 
         _visible[y, x] = true;
         _seen[y, x] = true;
+    }
+
+    /// <summary>存档用：把“看过”的格子摊平成一维数组。</summary>
+    public bool[] SnapshotSeen()
+    {
+        var result = new bool[_level.Width * _level.Height];
+
+        for (int y = 0; y < _level.Height; y++)
+        {
+            for (int x = 0; x < _level.Width; x++)
+            {
+                result[y * _level.Width + x] = _seen[y, x];
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>读档用：恢复“看过”的格子。</summary>
+    public void RestoreSeen(bool[] seen)
+    {
+        if (seen.Length != _level.Width * _level.Height)
+        {
+            return;
+        }
+
+        for (int y = 0; y < _level.Height; y++)
+        {
+            for (int x = 0; x < _level.Width; x++)
+            {
+                _seen[y, x] = seen[y * _level.Width + x];
+            }
+        }
     }
 
     /// <summary>魔法地图：把整层的地形都标成“看过”。</summary>

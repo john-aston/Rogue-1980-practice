@@ -19,10 +19,39 @@ public sealed class ItemKnowledge
     private readonly bool[] _potionsKnown = new bool[4];
     private readonly bool[] _scrollsKnown = new bool[3];
 
-    public ItemKnowledge(Random rng)
+    public ItemKnowledge(Random rng)//开局把颜色/卷轴标题洗牌，决定本局哪种药水是什么颜色
     {
         Shuffle(PotionColors, _potionAppearance, rng);
         Shuffle(ScrollTitles, _scrollTitle, rng);
+    }
+
+    private ItemKnowledge()
+    {
+    }
+
+    public KnowledgeData Snapshot() => new KnowledgeData
+    {
+        PotionAppearances = (string[])_potionAppearance.Clone(),
+        ScrollTitles = (string[])_scrollTitle.Clone(),
+        PotionsKnown = (bool[])_potionsKnown.Clone(),
+        ScrollsKnown = (bool[])_scrollsKnown.Clone(),
+    };
+
+    public static ItemKnowledge Restore(KnowledgeData data)
+    {
+        var knowledge = new ItemKnowledge();
+
+        Copy(data.PotionAppearances, knowledge._potionAppearance);
+        Copy(data.ScrollTitles, knowledge._scrollTitle);
+        Copy(data.PotionsKnown, knowledge._potionsKnown);
+        Copy(data.ScrollsKnown, knowledge._scrollsKnown);
+
+        return knowledge;
+    }
+
+    private static void Copy<T>(T[] source, T[] target)
+    {
+        Array.Copy(source, target, Math.Min(source.Length, target.Length));
     }
 
     public string PotionAppearance(PotionType type) => _potionAppearance[(int)type];

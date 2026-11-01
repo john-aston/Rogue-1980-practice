@@ -4,6 +4,7 @@ namespace Rogue.Core;
 
 public sealed class Player
 {
+    //玩家当前的坐标
     public int X { get; set; }
     public int Y { get; set; }
 
@@ -14,11 +15,31 @@ public sealed class Player
     public int Armor { get; set; } = 4;
     public int Gold { get; set; }
     public int Experience { get; set; }
-
+    
+    //背包、当前武器、当前护甲
     public List<Item> Inventory { get; } = new();
     public Item? Weapon { get; set; }
     public Item? WornArmor { get; set; }
-    public int Food { get; set; } = 500;
+
+    //饥饿值
+    public int Food { get; set; } = 1300;
+
+    //背包里是否有 `,`；通关判定用；amulet是通关的关键道具
+    public bool HasAmulet
+    {
+        get
+        {
+            foreach (Item item in Inventory)
+            {
+                if (item.Kind == ItemKind.Amulet)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 
 
 }
