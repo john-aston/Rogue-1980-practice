@@ -2,21 +2,15 @@
 
 纯 ASCII 地牢游戏，用 C# 从零实现，致敬 1980 年的 Rogue。
 
-> An ASCII roguelike built from scratch in C#, inspired by Rogue (1980).
-
 这是一个学习项目：目标不是做商业游戏，而是用一个"小而完整"的项目练 C#——
 集合与泛型、模式匹配、可空引用、单元测试、项目分层，都在这里有真实的用武之地。
 
 - 纯字符终端，不依赖任何图形库
-
 - 回合制：一次按键 = 一个动作
 - 机制向原版靠拢：随机地牢、永久死亡、物品鉴定、饥饿
 
 ## 当前画面
 <img width="400" height="211" alt="录屏2026-10-27 23 45 11 2" src="https://github.com/user-attachments/assets/84e4d187-6a9d-4ba7-ad3f-7a23159b2739" />
-
-
-
 
 ## 代码导读
 
@@ -51,43 +45,6 @@ dotnet run --project src/Rogue.Cli
 | `.` | 原地等待一回合 |
 | `Esc` / `Ctrl+Q` / `Ctrl+C` | 保存并退出 |
 
-## 地图图例
-
-| 字符 | 含义 |
-| --- | --- |
-| `@` | 玩家 |
-| `.` | 房间地面 |
-| `#` | 走廊 |
-| `-` `|` | 墙 |
-| `+` | 门（部分隐藏，需要搜索） |
-| `<` `>` | 上 / 下楼梯 |
-| `*` | 金币 |
-| `!` `?` `%` | 药水 / 卷轴 / 食物 |
-| `)` `[` | 武器 / 护甲 |
-| `,` | Amulet of Yendor |
-| `a`–`z` | 怪物 |
-| `^` | 已发现的陷阱 |
-
-## 目录结构
-
-```text
-Rogue/
-├── src/
-│   ├── Rogue.Core/              # 规则层：不依赖 Console
-│   │   ├── Game.cs              # 回合、战斗、物品、换层、输赢
-│   │   ├── Level.cs             # 地图、房间、门、物品、怪物、陷阱
-│   │   ├── LevelGenerator.cs    # 3×3 扇区随机地牢
-│   │   ├── Visibility.cs        # 视野与已探索记忆
-│   │   ├── Monster*.cs          # 怪物表、生成、AI
-│   │   ├── Item*.cs             # 物品、随机外观、鉴定
-│   │   ├── Trap*.cs             # 陷阱与生成
-│   │   ├── SaveData.cs          # 存档 DTO
-│   │   └── SaveStore.cs         # 存档与排行榜文件读写
-│   └── Rogue.Cli/               # 界面层
-│       ├── Program.cs           # 主循环、输入、背包界面、结算
-│       └── Screen.cs            # 80×24 帧缓冲 + ANSI 差分
-└── tests/Rogue.Core.Tests/      # 43 个测试
-```
 
 ## 设计说明
 
