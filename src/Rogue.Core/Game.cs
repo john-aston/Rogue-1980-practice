@@ -369,6 +369,42 @@ public sealed class Game
         return true;
     }
 
+    public bool ToggleArmor()
+{
+    if (Player.WornArmor is not null)
+    {
+        return TakeOff();
+    }
+
+    int index = Player.Inventory.FindIndex(item => item.Kind == ItemKind.Armor);
+
+    if (index < 0)
+    {
+        Notify("You have no armor to put on.");
+        return false;
+    }
+
+    return Wear(index);
+}
+
+    public bool UseStairs()
+    {
+        char tile = Map[Player.X, Player.Y];
+
+        if (tile == Tiles.StairsUp)
+        {
+            return TryAscend();
+        }
+
+        if (tile == Tiles.StairsDown)
+        {
+            return TryDescend();
+        }
+
+        Notify("You are not standing on a staircase.");
+        return false;
+    }
+
     public void Notify(string message)
     {
         _messages.Clear();

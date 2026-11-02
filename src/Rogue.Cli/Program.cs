@@ -1,12 +1,10 @@
 using Rogue.Core;
+using Rogue.Cli.Input;
 
 namespace Rogue.Cli;
 
 internal static class Program
 {
-    private const string Hint =
-        "Move hjklyubn | g get | i inv | q r e use | w W T equip | d drop | s search | < > stairs | . wait";
-
     private static void Main()
     {
         if (Console.IsInputRedirected)
@@ -85,92 +83,76 @@ internal static class Program
                 return;
             }
 
-            if (key.KeyChar is 'i' or 'I')
+                        KeyBinding? resolved = InputResolver.Resolve(key);
+            if (resolved is not { } binding)
             {
-                ShowInventory(screen, game, "Inventory");
+                continue;
             }
-            else if (key.KeyChar is 'g' or 'G')
-            {
-                game.PickUp();
-            }
-            else if (key.KeyChar is 'q')
-            {
-                int? index = ChooseItem(screen, game, "Quaff which item?");
-                if (index is int slot)
-                {
-                    game.Quaff(slot);
-                }
-            }
-            else if (key.KeyChar is 'r')
-            {
-                int? index = ChooseItem(screen, game, "Read which item?");
-                if (index is int slot)
-                {
-                    game.Read(slot);
-                }
-            }
-            else if (key.KeyChar is 'e')
-            {
-                int? index = ChooseItem(screen, game, "Eat which item?");
-                if (index is int slot)
-                {
-                    game.Eat(slot);
-                }
-            }
-            else if (key.KeyChar is 'w')
-            {
-                int? index = ChooseItem(screen, game, "Wield which item?");
-                if (index is int slot)
-                {
-                    game.Wield(slot);
-                }
-            }
-            else if (key.KeyChar is 'W')
-            {
-                int? index = ChooseItem(screen, game, "Wear which item?");
-                if (index is int slot)
-                {
-                    game.Wear(slot);
-                }
-            }
-            else if (key.KeyChar is 'T')
-            {
-                game.TakeOff();
-            }
-            else if (key.KeyChar is 'd')
-            {
-                int? index = ChooseItem(screen, game, "Drop which item?");
-                if (index is int slot)
-                {
-                    game.Drop(slot);
-                }
-            }
-            else if (key.KeyChar is 's' or 'S')
-            {
-                game.Search();
-            }
-            else if (key.KeyChar == '>')
-            {
-                game.TryDescend();
-            }
-            else if (key.KeyChar == '<')
-            {
-                game.TryAscend();
-            }
-            else if (key.KeyChar == '.')
-            {
-                game.Wait();
-            }
-            else
-            {
-                (int dx, int dy)? direction = ReadDirection(key);
-                if (direction is null)
-                {
-                    continue;
-                }
 
-                (int dx, int dy) = direction.Value;
-                game.TryMove(dx, dy);
+            switch (binding.Action)
+            {
+                case GameAction.Move:
+                    game.TryMove(binding.Dx, binding.Dy);
+                    break;
+
+                case GameAction.Wait:
+                    game.Wait();
+                    break;
+
+                case GameAction.PickUp:
+                    game.PickUp();
+                    break;
+
+                case GameAction.Inventory:
+                    ShowInventory(screen, game, "Inventory");
+                    break;
+
+                case GameAction.Quaff:
+                    if (ChooseItem(screen, game, "Quaff which item?") is int quaff)
+                    {
+                        game.Quaff(quaff);
+                    }
+                    break;
+
+                case GameAction.Read:
+                    if (ChooseItem(screen, game, "Read which item?") is int read)
+                    {
+                        game.Read(read);
+                    }
+                    break;
+
+                case GameAction.Eat:
+                    if (ChooseItem(screen, game, "Eat which item?") is int eat)
+                    {
+                        game.Eat(eat);
+                    }
+                    break;
+
+                case GameAction.Wield:
+                    if (ChooseItem(screen, game, "Wield which item?") is int wield)
+                    {
+                        game.Wield(wield);
+                    }
+                    break;
+
+                case GameAction.ToggleArmor:
+                    game.ToggleArmor();
+                    break;
+    
+                case GameAction.Drop:
+                    if (ChooseItem(screen, game, "Drop which item?") is int drop)
+                    {
+                        game.Drop(drop);
+                    }
+                    break;
+
+                case GameAction.Search:
+                    game.Search();
+                    break;
+
+                case GameAction.UseStairs:
+                    game.UseStairs();
+                    break;
             }
 
             if (game.IsWon)
@@ -302,7 +284,7 @@ internal static class Program
 
         screen.Write(0, 0, status, ConsoleColor.Gray);
 
-        string message = game.Message.Length > 0 ? game.Message : Hint;
+        string message = game.Message.Length > 0 ? game.Message : KeyMap.Hint;
         screen.Write(0, 23, message, ConsoleColor.Gray);
 
         screen.Present();
@@ -385,29 +367,6 @@ internal static class Program
         _ => ConsoleColor.Gray,
     };
 
-    private static (int dx, int dy)? ReadDirection(ConsoleKeyInfo key)
-    {
-        switch (key.Key)
-        {
-            case ConsoleKey.LeftArrow: return (-1, 0);
-            case ConsoleKey.RightArrow: return (1, 0);
-            case ConsoleKey.UpArrow: return (0, -1);
-            case ConsoleKey.DownArrow: return (0, 1);
-        }
-
-        return char.ToLowerInvariant(key.KeyChar) switch
-        {
-            'h' => (-1, 0),
-            'l' => (1, 0),
-            'k' => (0, -1),
-            'j' => (0, 1),
-            'y' => (-1, -1),
-            'u' => (1, -1),
-            'b' => (-1, 1),
-            'n' => (1, 1),
-            _ => null,
-        };
-    }
 
     private static bool TerminalTooSmall()
     {
