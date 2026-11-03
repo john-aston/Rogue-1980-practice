@@ -9,5 +9,4 @@ public sealed record MonsterDefinition(
     int HpSides,
     int DamageDice,
     int DamageSides,
-    int Armor,
-    int Experience);
+    int Armor);

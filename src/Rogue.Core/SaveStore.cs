@@ -8,7 +8,6 @@ public sealed class ScoreEntry
     public int Score { get; set; }
     public int Level { get; set; }
     public int Gold { get; set; }
-    public int Experience { get; set; }
     public bool Won { get; set; }
     public string Date { get; set; } = "";
 }

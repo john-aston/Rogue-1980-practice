@@ -5,25 +5,30 @@ namespace Rogue.Core.Tests;
 public class GameTests
 {
     [Fact]
-    public void Searching_eventually_finds_an_adjacent_secret_door()
+    public void Player_starts_on_the_up_stairs()
+    {
+        var game = new Game(1234);
+
+        Assert.Equal(Tiles.StairsUp, game.Map[game.Player.X, game.Player.Y]);
+    }
+
+    [Fact]
+    public void Walking_into_a_wall_does_not_move_or_advance_the_turn()
     {
         var level = Level.FromAscii(
-            "#####",
-            "#|..#",
-            "#...#",
-            "#####");
-        level.AddSecretDoor(1, 1, Tiles.WallVertical);
+            "-----",
+            "|...|",
+            "-----");
+
         var game = new Game(level, 2, 1);
 
-        bool found = false;
+        Assert.False(game.TryMove(0, -1));
+        Assert.Equal(2, game.Player.X);
+        Assert.Equal(1, game.Player.Y);
+        Assert.Equal(0, game.Turn);
 
-        for (int i = 0; i < 200 && !found; i++)
-        {
-            found = game.Search();
-        }
-
-        Assert.True(found);
-        Assert.Equal(Tiles.Door, level[1, 1]);
+        Assert.True(game.TryMove(-1, 0));
+        Assert.Equal(1, game.Player.X);
+        Assert.Equal(1, game.Turn);
     }
-    
 }

@@ -1,35 +1,42 @@
 namespace Rogue.Core;
 
+public enum MessageTone
+{
+    Normal,
+    Good,
+    Bad,
+}
+
 public sealed class Game
 {
     public const int MapWidth = 80;
     public const int MapHeight = 22;
     public const int MaxDepth = 26;
     public const int WakeDistance = 8;
-    public const int InventorySize = 26;
+    public const int MaxUpgradeLevel = 5;
+    public const int UpgradeCostBase = 40;
 
     private readonly Random _rng;
     private readonly int _seed;
     private readonly Dictionary<int, DungeonLevel> _levels = new();
-    private readonly List<string> _messages = new();
+    private readonly List<(string Text, MessageTone Tone)> _messages = new();
     private bool _hungryShown;
     private bool _weakShown;
     private string? _deathCause;
     private DungeonLevel _current;
 
     public Player Player { get; }
-    public ItemKnowledge Knowledge { get; }
     public int Turn { get; private set; }
     public int LevelNumber { get; private set; }
     public bool IsDead => Player.Hp <= 0;
     public bool IsWon { get; private set; }
 
-    public int Score =>
-        Player.Gold + Player.Experience + LevelNumber * 10 + (Player.HasAmulet ? 1000 : 0);
+    public int Score => Player.Gold + LevelNumber * 10 + (Player.HasAmulet ? 1000 : 0);
 
     public Level Map => _current.Map;
     public Visibility Sight => _current.Sight;
-    public string Message => _messages.Count == 0 ? "" : _messages[^1];
+    public string Message => _messages.Count == 0 ? "" : _messages[^1].Text;
+    public MessageTone Tone => _messages.Count == 0 ? MessageTone.Normal : _messages[^1].Tone;
 
     public Game() : this(Random.Shared.Next())
     {
@@ -39,7 +46,6 @@ public sealed class Game
     {
         _seed = seed;
         _rng = new Random(seed);
-        Knowledge = new ItemKnowledge(_rng);
         Player = new Player();
 
         LevelNumber = 1;
@@ -52,7 +58,6 @@ public sealed class Game
     {
         _seed = 0;
         _rng = new Random(0);
-        Knowledge = new ItemKnowledge(_rng);
         Player = new Player { X = playerX, Y = playerY };
 
         LevelNumber = 1;
@@ -86,32 +91,7 @@ public sealed class Game
         Player.X = nextX;
         Player.Y = nextY;
         Sight.Update(Player.X, Player.Y);
-
-        Item? here = Map.ItemAt(Player.X, Player.Y);
-
-        if (here is { Kind: ItemKind.Gold })
-        {
-            Map.RemoveItem(here);
-            Player.Gold += here.GoldAmount;
-            AddMessage($"You pick up {here.GoldAmount} gold.");
-        }
-
-        Trap? trap = Map.TrapAt(Player.X, Player.Y);
-
-        if (trap is not null && TriggerTrap(trap))
-        {
-            // 掉到下一层：这一回合不再让怪物行动
-            Turn++;
-            HungerTick();
-
-            if (IsDead)
-            {
-                AddDeathMessage();
-            }
-
-            return true;
-        }
-
+        PickUpItemOnFloor();
         EndTurn();
         return true;
     }
@@ -123,151 +103,53 @@ public sealed class Game
         EndTurn();
     }
 
-    public bool PickUp()
+    public bool Quaff()
     {
         _messages.Clear();
 
-        Item? item = Map.ItemAt(Player.X, Player.Y);
-
-        if (item is null)
+        if (Player.Potions <= 0)
         {
-            AddMessage("There is nothing here.");
+            AddMessage("You have no potions.", MessageTone.Bad);
             return false;
         }
 
-        if (item.Kind == ItemKind.Gold)
-        {
-            Map.RemoveItem(item);
-            Player.Gold += item.GoldAmount;
-            AddMessage($"You pick up {item.GoldAmount} gold.");
-            EndTurn();
-            return true;
-        }
-
-        if (Player.Inventory.Count >= InventorySize)
-        {
-            AddMessage("Your pack is full.");
-            return false;
-        }
-
-        Map.RemoveItem(item);
-        Player.Inventory.Add(item);
-        AddMessage($"You pick up {item.DisplayName(Knowledge)}.");
+        Player.Potions--;
+        int healed = Dice.Roll(2, 8, _rng);
+        Player.Hp = Math.Min(Player.MaxHp, Player.Hp + healed);
+        AddMessage($"You drink a healing potion and recover {healed} HP.", MessageTone.Good);
         EndTurn();
         return true;
     }
 
-    public bool Drop(int index)
+    public bool Read()
     {
         _messages.Clear();
 
-        if (index < 0 || index >= Player.Inventory.Count)
+        if (Player.Scrolls <= 0)
         {
+            AddMessage("You have no scrolls.", MessageTone.Bad);
             return false;
         }
 
-        if (Map.ItemAt(Player.X, Player.Y) is not null)
-        {
-            AddMessage("You can't drop it here.");
-            return false;
-        }
-
-        Item item = Player.Inventory[index];
-        Player.Inventory.RemoveAt(index);
-        item.X = Player.X;
-        item.Y = Player.Y;
-        Map.AddItem(item);
-        AddMessage($"You drop {item.DisplayName(Knowledge)}.");
+        Player.Scrolls--;
+        TeleportPlayer();
+        AddMessage("You read a teleport scroll. The world lurches.", MessageTone.Good);
         EndTurn();
         return true;
     }
 
-    public bool Quaff(int index)
+    public bool Eat()
     {
         _messages.Clear();
 
-        if (index < 0 || index >= Player.Inventory.Count)
+        if (Player.Rations <= 0)
         {
+            AddMessage("You have no food.", MessageTone.Bad);
             return false;
         }
 
-        Item item = Player.Inventory[index];
-
-        if (item.Kind != ItemKind.Potion)
-        {
-            AddMessage("You can't quaff that.");
-            return false;
-        }
-
-        Player.Inventory.RemoveAt(index);
-        AddMessage($"You quaff {item.DisplayName(Knowledge)}.");
-        Knowledge.Identify(item.Potion);
-        ApplyPotion(item.Potion);
-        EndTurn();
-        return true;
-    }
-
-    public bool Read(int index)
-    {
-        _messages.Clear();
-
-        if (index < 0 || index >= Player.Inventory.Count)
-        {
-            return false;
-        }
-
-        Item item = Player.Inventory[index];
-
-        if (item.Kind != ItemKind.Scroll)
-        {
-            AddMessage("You can't read that.");
-            return false;
-        }
-
-        Player.Inventory.RemoveAt(index);
-        AddMessage($"You read {item.DisplayName(Knowledge)}.");
-        Knowledge.Identify(item.Scroll);
-
-        switch (item.Scroll)
-        {
-            case ScrollType.Identify:
-                IdentifySomething();
-                break;
-
-            case ScrollType.Teleport:
-                TeleportPlayer();
-                AddMessage("You feel a wrenching sensation.");
-                break;
-
-            case ScrollType.MagicMapping:
-                Sight.RevealAll();
-                AddMessage("A map appears in your mind.");
-                break;
-        }
-
-        EndTurn();
-        return true;
-    }
-
-    public bool Eat(int index)
-    {
-        _messages.Clear();
-
-        if (index < 0 || index >= Player.Inventory.Count)
-        {
-            return false;
-        }
-
-        Item item = Player.Inventory[index];
-
-        if (item.Kind != ItemKind.Food)
-        {
-            AddMessage("You can't eat that.");
-            return false;
-        }
-
-        Player.Inventory.RemoveAt(index);
-        Player.Food += item.Nutrition;
+        Player.Rations--;
+        Player.Food += 500;
 
         if (Player.Food > 300)
         {
@@ -279,113 +161,26 @@ public sealed class Game
             _weakShown = false;
         }
 
-        AddMessage("You eat the food.");
+        AddMessage("You eat a food ration.", MessageTone.Good);
         EndTurn();
         return true;
     }
 
-    public bool Wield(int index)
+    /// <summary>金币升级。1 剑、2 甲、3 药水、4 食物、5 最大 HP。</summary>
+    public bool Buy(int option)
     {
         _messages.Clear();
 
-        if (index < 0 || index >= Player.Inventory.Count)
+        return option switch
         {
-            return false;
-        }
-
-        Item item = Player.Inventory[index];
-
-        if (item.Kind != ItemKind.Weapon)
-        {
-            AddMessage("You can't wield that.");
-            return false;
-        }
-
-        Player.Inventory.RemoveAt(index);
-
-        if (Player.Weapon is { } oldWeapon)
-        {
-            Player.Inventory.Add(oldWeapon);
-        }
-
-        Player.Weapon = item;
-        AddMessage($"You wield {item.Name}.");
-        EndTurn();
-        return true;
+            1 => BuySword(),
+            2 => BuyArmor(),
+            3 => BuyPotion(),
+            4 => BuyRation(),
+            5 => BuyMaxHp(),
+            _ => BuyNothing(),
+        };
     }
-
-    public bool Wear(int index)
-    {
-        _messages.Clear();
-
-        if (index < 0 || index >= Player.Inventory.Count)
-        {
-            return false;
-        }
-
-        Item item = Player.Inventory[index];
-
-        if (item.Kind != ItemKind.Armor)
-        {
-            AddMessage("You can't wear that.");
-            return false;
-        }
-
-        if (Player.WornArmor is not null)
-        {
-            AddMessage("You are already wearing armor.");
-            return false;
-        }
-
-        Player.Inventory.RemoveAt(index);
-        Player.WornArmor = item;
-        Player.Armor += item.Armor;
-        AddMessage($"You wear {item.Name}.");
-        EndTurn();
-        return true;
-    }
-
-    public bool TakeOff()
-    {
-        _messages.Clear();
-
-        if (Player.WornArmor is not { } armor)
-        {
-            AddMessage("You aren't wearing armor.");
-            return false;
-        }
-
-        if (Player.Inventory.Count >= InventorySize)
-        {
-            AddMessage("Your pack is full.");
-            return false;
-        }
-
-        Player.Inventory.Add(armor);
-        Player.Armor -= armor.Armor;
-        Player.WornArmor = null;
-        AddMessage($"You take off the {armor.Name}.");
-        EndTurn();
-        return true;
-    }
-
-    public bool ToggleArmor()
-{
-    if (Player.WornArmor is not null)
-    {
-        return TakeOff();
-    }
-
-    int index = Player.Inventory.FindIndex(item => item.Kind == ItemKind.Armor);
-
-    if (index < 0)
-    {
-        Notify("You have no armor to put on.");
-        return false;
-    }
-
-    return Wear(index);
-}
 
     public bool UseStairs()
     {
@@ -403,63 +198,6 @@ public sealed class Game
 
         Notify("You are not standing on a staircase.");
         return false;
-    }
-
-    public void Notify(string message)
-    {
-        _messages.Clear();
-        AddMessage(message);
-    }
-
-    public bool Search()
-    {
-        _messages.Clear();
-        bool foundDoor = false;
-        bool foundTrap = false;
-
-        for (int dy = -1; dy <= 1; dy++)
-        {
-            for (int dx = -1; dx <= 1; dx++)
-            {
-                if (dx == 0 && dy == 0)
-                {
-                    continue;
-                }
-
-                int x = Player.X + dx;
-                int y = Player.Y + dy;
-
-                if (Map.IsSecretDoor(x, y) && _rng.Next(5) == 0)
-                {
-                    Map.RevealSecretDoor(x, y);
-                    foundDoor = true;
-                }
-
-                Trap? trap = Map.TrapAt(x, y);
-
-                if (trap is { IsFound: false } && _rng.Next(2) == 0)
-                {
-                    trap.IsFound = true;
-                    foundTrap = true;
-                }
-            }
-        }
-
-        if (foundDoor)
-        {
-            AddMessage("You found a secret door!");
-        }
-        else if (foundTrap)
-        {
-            AddMessage("You found a trap!");
-        }
-        else
-        {
-            AddMessage("You search but find nothing.");
-        }
-
-        EndTurn();
-        return foundDoor || foundTrap;
     }
 
     public bool TryDescend()
@@ -494,7 +232,7 @@ public sealed class Game
             if (Player.HasAmulet)
             {
                 IsWon = true;
-                AddMessage("You escape the Dungeon of Doom with the Amulet of Yendor!");
+                AddMessage("You escape the Dungeon of Doom with the Amulet of Yendor!", MessageTone.Good);
             }
             else
             {
@@ -511,52 +249,177 @@ public sealed class Game
         return true;
     }
 
-    private void ApplyPotion(PotionType type)
+    public void Notify(string message)
     {
-        switch (type)
-        {
-            case PotionType.Healing:
-                Player.Hp = Math.Min(Player.MaxHp, Player.Hp + Dice.Roll(2, 8, _rng));
-                AddMessage("You feel better.");
-                break;
-
-            case PotionType.ExtraHealing:
-                Player.Hp = Math.Min(Player.MaxHp, Player.Hp + Dice.Roll(4, 8, _rng));
-                AddMessage("You feel much better.");
-                break;
-
-            case PotionType.Poison:
-                Player.Hp -= Dice.Roll(1, 6, _rng);
-                AddMessage("You feel very sick.");
-                break;
-
-            case PotionType.Experience:
-                AddMessage("You feel more experienced.");
-                GainExperience(10);
-                break;
-        }
+        _messages.Clear();
+        AddMessage(message);
     }
 
-    private void IdentifySomething()
+    private bool BuySword()
     {
-        foreach (Item item in Player.Inventory)
+        if (Player.SwordLevel >= MaxUpgradeLevel)
         {
-            if (item.Kind == ItemKind.Potion && !Knowledge.IsKnown(item.Potion))
-            {
-                Knowledge.Identify(item.Potion);
-                AddMessage($"You now know what {item.DisplayName(Knowledge)} is.");
-                return;
-            }
-
-            if (item.Kind == ItemKind.Scroll && !Knowledge.IsKnown(item.Scroll))
-            {
-                Knowledge.Identify(item.Scroll);
-                AddMessage($"You now know what {item.DisplayName(Knowledge)} is.");
-                return;
-            }
+            AddMessage("Your sword is already at its maximum.");
+            return false;
         }
 
-        AddMessage("You have nothing to identify.");
+        int cost = UpgradeCostBase * (Player.SwordLevel + 1);
+
+        if (Player.Gold < cost)
+        {
+            AddMessage($"You need {cost} gold for that.", MessageTone.Bad);
+            return false;
+        }
+
+        Player.Gold -= cost;
+        Player.SwordLevel++;
+        AddMessage($"Your sword is now +{Player.SwordLevel}. Gold left: {Player.Gold}.", MessageTone.Good);
+        return true;
+    }
+
+    private bool BuyArmor()
+    {
+        if (Player.ArmorLevel >= MaxUpgradeLevel)
+        {
+            AddMessage("Your armor is already at its maximum.");
+            return false;
+        }
+
+        int cost = UpgradeCostBase * (Player.ArmorLevel + 1);
+
+        if (Player.Gold < cost)
+        {
+            AddMessage($"You need {cost} gold for that.", MessageTone.Bad);
+            return false;
+        }
+
+        Player.Gold -= cost;
+        Player.ArmorLevel++;
+        Player.Armor++;
+        AddMessage($"Your armor is now +{Player.ArmorLevel}. Gold left: {Player.Gold}.", MessageTone.Good);
+        return true;
+    }
+
+    private bool BuyPotion()
+    {
+        if (Player.Potions >= Player.PotionLimit)
+        {
+            AddMessage("Your potion belt is full.");
+            return false;
+        }
+
+        if (Player.Gold < 25)
+        {
+            AddMessage("You need 25 gold for a potion.", MessageTone.Bad);
+            return false;
+        }
+
+        Player.Gold -= 25;
+        Player.Potions++;
+        AddMessage($"You buy a healing potion. Gold left: {Player.Gold}.", MessageTone.Good);
+        return true;
+    }
+
+    private bool BuyRation()
+    {
+        if (Player.Rations >= Player.RationLimit)
+        {
+            AddMessage("Your pack is full of food.");
+            return false;
+        }
+
+        if (Player.Gold < 15)
+        {
+            AddMessage("You need 15 gold for food.", MessageTone.Bad);
+            return false;
+        }
+
+        Player.Gold -= 15;
+        Player.Rations++;
+        AddMessage($"You buy a food ration. Gold left: {Player.Gold}.", MessageTone.Good);
+        return true;
+    }
+
+    private bool BuyMaxHp()
+    {
+        if (Player.Gold < 60)
+        {
+            AddMessage("You need 60 gold for that.", MessageTone.Bad);
+            return false;
+        }
+
+        Player.Gold -= 60;
+        Player.MaxHp += 2;
+        Player.Hp += 2;
+        AddMessage($"Your maximum HP is now {Player.MaxHp}.", MessageTone.Good);
+        return true;
+    }
+
+    private bool BuyNothing()
+    {
+        AddMessage("There is no such upgrade.");
+        return false;
+    }
+
+    private void PickUpItemOnFloor()
+    {
+        Item? item = Map.ItemAt(Player.X, Player.Y);
+
+        if (item is null)
+        {
+            return;
+        }
+
+        switch (item.Kind)
+        {
+            case ItemKind.Gold:
+                Map.RemoveItem(item);
+                Player.Gold += item.GoldAmount;
+                AddMessage($"You pick up {item.GoldAmount} gold.", MessageTone.Good);
+                break;
+
+            case ItemKind.Potion:
+                if (Player.Potions >= Player.PotionLimit)
+                {
+                    AddMessage("Your potion belt is full.");
+                    return;
+                }
+
+                Map.RemoveItem(item);
+                Player.Potions++;
+                AddMessage("You pick up a healing potion.", MessageTone.Good);
+                break;
+
+            case ItemKind.Scroll:
+                if (Player.Scrolls >= Player.ScrollLimit)
+                {
+                    AddMessage("Your scroll case is full.");
+                    return;
+                }
+
+                Map.RemoveItem(item);
+                Player.Scrolls++;
+                AddMessage("You pick up a teleport scroll.", MessageTone.Good);
+                break;
+
+            case ItemKind.Food:
+                if (Player.Rations >= Player.RationLimit)
+                {
+                    AddMessage("Your pack is full of food.");
+                    return;
+                }
+
+                Map.RemoveItem(item);
+                Player.Rations++;
+                AddMessage("You pick up a food ration.", MessageTone.Good);
+                break;
+
+            case ItemKind.Amulet:
+                Map.RemoveItem(item);
+                Player.HasAmulet = true;
+                AddMessage("You pick up the Amulet of Yendor!", MessageTone.Good);
+                break;
+        }
     }
 
     private void TeleportPlayer()
@@ -578,100 +441,6 @@ public sealed class Game
         }
     }
 
-    private bool TriggerTrap(Trap trap)
-    {
-        Map.RemoveTrap(trap);
-
-        switch (trap.Type)
-        {
-            case TrapType.TrapDoor:
-                if (LevelNumber >= MaxDepth)
-                {
-                    Player.Hp -= Dice.Roll(1, 6, _rng);
-                    AddMessage("You fall, but there is nowhere to go.");
-                    return false;
-                }
-
-                LevelNumber++;
-                _current = LoadLevel(LevelNumber);
-                MovePlayerTo(_current.Map.UpStairs);
-                AddMessage($"You fall through a trap door to level {LevelNumber}!");
-                return true;
-
-            case TrapType.Arrow:
-                if (_rng.Next(2) == 0)
-                {
-                    int damage = Dice.Roll(1, 6, _rng);
-                    Player.Hp -= damage;
-                    AddMessage($"An arrow hits you for {damage}.");
-
-                    if (Player.Hp <= 0)
-                    {
-                        _deathCause = "an arrow";
-                    }
-                }
-                else
-                {
-                    AddMessage("An arrow flies past you.");
-                }
-
-                return false;
-
-            case TrapType.PoisonNeedle:
-            {
-                int damage = Dice.Roll(1, 4, _rng);
-                Player.Hp -= damage;
-                AddMessage($"A poison needle pricks you for {damage}.");
-
-                if (Player.Hp <= 0)
-                {
-                    _deathCause = "poison";
-                }
-
-                return false;
-            }
-
-            case TrapType.Teleport:
-                TeleportPlayer();
-                AddMessage("You are teleported.");
-                return false;
-
-            default:
-                return false;
-        }
-    }
-
-    private void HungerTick()
-    {
-        Player.Food--;
-
-        if (Player.Food <= 300 && !_hungryShown)
-        {
-            AddMessage("You are hungry.");
-            _hungryShown = true;
-        }
-
-        if (Player.Food <= 0 && !_weakShown)
-        {
-            AddMessage("You are weak.");
-            _weakShown = true;
-        }
-
-        if (Player.Food <= -200)
-        {
-            _deathCause = "starvation";
-            AddMessage("You faint from lack of food.");
-            Player.Hp = 0;
-        }
-    }
-
-    private void AddDeathMessage()
-    {
-        AddMessage(_deathCause is null
-            ? $"You die on level {LevelNumber}."
-            : $"You die of {_deathCause}.");
-    }
-
     private void EndTurn()
     {
         Turn++;
@@ -686,6 +455,37 @@ public sealed class Game
         {
             AddDeathMessage();
         }
+    }
+
+    private void HungerTick()
+    {
+        Player.Food--;
+
+        if (Player.Food <= 300 && !_hungryShown)
+        {
+            AddMessage("You are hungry.", MessageTone.Bad);
+            _hungryShown = true;
+        }
+
+        if (Player.Food <= 0 && !_weakShown)
+        {
+            AddMessage("You are weak.", MessageTone.Bad);
+            _weakShown = true;
+        }
+
+        if (Player.Food <= -200)
+        {
+            _deathCause = "starvation";
+            AddMessage("You faint from lack of food.", MessageTone.Bad);
+            Player.Hp = 0;
+        }
+    }
+
+    private void AddDeathMessage()
+    {
+        AddMessage(_deathCause is null
+            ? $"You die on level {LevelNumber}."
+            : $"You die of {_deathCause}.", MessageTone.Bad);
     }
 
     private void MonstersAct()
@@ -726,7 +526,7 @@ public sealed class Game
     {
         MonsterDefinition definition = monster.Definition;
 
-        int roll = _rng.Next(1, 21) + Player.Level;
+        int roll = _rng.Next(1, 21) + 2 + Player.SwordLevel;
         int target = 10 + definition.Armor;
 
         if (roll < target)
@@ -735,22 +535,19 @@ public sealed class Game
             return;
         }
 
-        int damage = Player.Weapon is { } weapon
-            ? Dice.Roll(weapon.DamageDice, weapon.DamageSides, _rng)
-            : Dice.Roll(1, 4, _rng);
-
-        damage += Math.Max(0, (Player.Strength - 16) / 2);
+        int damage = Dice.Roll(2, 4, _rng) + Player.SwordLevel;
         monster.Hp -= damage;
 
         if (monster.Hp > 0)
         {
-            AddMessage($"You hit the {definition.Name}.");
+            AddMessage($"You hit the {definition.Name} for {damage}.");
             return;
         }
 
         Map.RemoveMonster(monster);
-        AddMessage($"You defeat the {definition.Name}.");
-        GainExperience(definition.Experience);
+        int reward = 4 + definition.Level * 3;
+        Player.Gold += reward;
+        AddMessage($"You defeat the {definition.Name} and find {reward} gold.", MessageTone.Good);
     }
 
     private void MonsterAttack(Monster monster)
@@ -768,20 +565,7 @@ public sealed class Game
 
         int damage = Dice.Roll(definition.DamageDice, definition.DamageSides, _rng);
         Player.Hp -= damage;
-        AddMessage($"The {definition.Name} hits you for {damage}.");
-    }
-
-    private void GainExperience(int amount)
-    {
-        Player.Experience += amount;
-
-        while (Player.Experience >= Player.Level * 5)
-        {
-            Player.Level++;
-            Player.MaxHp += 3;
-            Player.Hp = Player.MaxHp;
-            AddMessage($"Welcome to level {Player.Level}.");
-        }
+        AddMessage($"The {definition.Name} hits you for {damage}.", MessageTone.Bad);
     }
 
     private void StepTowardPlayer(Monster monster)
@@ -840,7 +624,8 @@ public sealed class Game
     private static int Distance(int x, int y, int targetX, int targetY)
         => Math.Max(Math.Abs(x - targetX), Math.Abs(y - targetY));
 
-    private void AddMessage(string message) => _messages.Add(message);
+    private void AddMessage(string text, MessageTone tone = MessageTone.Normal)
+        => _messages.Add((text, tone));
 
     private void MovePlayerTo((int X, int Y) position)
     {
@@ -868,10 +653,7 @@ public sealed class Game
         MonsterSpawner.Populate(map, number, spawnRng);
 
         var itemRng = new Random(LevelSeed(number) ^ 0x51ed270b);
-        ItemSpawner.Populate(map, number, Knowledge, itemRng);
-
-        var trapRng = new Random(LevelSeed(number) ^ 0x6a09e667);
-        TrapSpawner.Populate(map, number, trapRng);
+        ItemSpawner.Populate(map, number, itemRng);
 
         if (number == MaxDepth)
         {
@@ -897,30 +679,17 @@ public sealed class Game
                 int x = rng.Next(room.X + 1, room.Right);
                 int y = rng.Next(room.Y + 1, room.Bottom);
 
-                if (!level.IsWalkable(x, y))
+                if (!level.IsWalkable(x, y) || level.ItemAt(x, y) is not null || level.MonsterAt(x, y) is not null)
                 {
                     continue;
                 }
 
-                if (level[x, y] is Tiles.StairsUp or Tiles.StairsDown)
-                {
-                    continue;
-                }
-
-                if (level.ItemAt(x, y) is not null
-                    || level.MonsterAt(x, y) is not null
-                    || level.TrapAt(x, y) is not null)
-                {
-                    continue;
-                }
-
-                level.AddItem(Item.CreateAmulet(x, y));
+                level.AddItem(Item.Amulet(x, y));
                 return;
             }
         }
     }
 
-    /// <summary>把当前这一局压成可序列化的数据。</summary>
     public SaveData Snapshot()
     {
         var data = new SaveData
@@ -928,22 +697,21 @@ public sealed class Game
             Seed = _seed,
             Turn = Turn,
             LevelNumber = LevelNumber,
-            Knowledge = Knowledge.Snapshot(),
             Player = new PlayerData
             {
                 X = Player.X,
                 Y = Player.Y,
                 Hp = Player.Hp,
                 MaxHp = Player.MaxHp,
-                Level = Player.Level,
-                Strength = Player.Strength,
                 Armor = Player.Armor,
                 Gold = Player.Gold,
-                Experience = Player.Experience,
                 Food = Player.Food,
-                Inventory = Player.Inventory.Select(ItemData.From).ToList(),
-                Weapon = Player.Weapon is null ? null : ItemData.From(Player.Weapon),
-                WornArmor = Player.WornArmor is null ? null : ItemData.From(Player.WornArmor),
+                Potions = Player.Potions,
+                Scrolls = Player.Scrolls,
+                Rations = Player.Rations,
+                SwordLevel = Player.SwordLevel,
+                ArmorLevel = Player.ArmorLevel,
+                HasAmulet = Player.HasAmulet,
             },
         };
 
@@ -970,36 +738,22 @@ public sealed class Game
         _seed = data.Seed;
         _rng = new Random(unchecked(data.Seed ^ (data.Turn * 7919)));
 
-        Knowledge = ItemKnowledge.Restore(data.Knowledge);
-
         Player = new Player
         {
             X = data.Player.X,
             Y = data.Player.Y,
             Hp = data.Player.Hp,
             MaxHp = data.Player.MaxHp,
-            Level = data.Player.Level,
-            Strength = data.Player.Strength,
             Armor = data.Player.Armor,
             Gold = data.Player.Gold,
-            Experience = data.Player.Experience,
             Food = data.Player.Food,
+            Potions = data.Player.Potions,
+            Scrolls = data.Player.Scrolls,
+            Rations = data.Player.Rations,
+            SwordLevel = data.Player.SwordLevel,
+            ArmorLevel = data.Player.ArmorLevel,
+            HasAmulet = data.Player.HasAmulet,
         };
-
-        foreach (ItemData item in data.Player.Inventory)
-        {
-            Player.Inventory.Add(item.ToItem());
-        }
-
-        if (data.Player.Weapon is not null)
-        {
-            Player.Weapon = data.Player.Weapon.ToItem();
-        }
-
-        if (data.Player.WornArmor is not null)
-        {
-            Player.WornArmor = data.Player.WornArmor.ToItem();
-        }
 
         foreach (LevelData level in data.Levels)
         {
@@ -1062,16 +816,6 @@ public sealed class Game
             });
         }
 
-        foreach ((int x, int y) in level.SecretDoors)
-        {
-            data.SecretDoors.Add(new SecretDoorData
-            {
-                X = x,
-                Y = y,
-                Disguise = level[x, y],
-            });
-        }
-
         foreach (Monster monster in level.Monsters)
         {
             data.Monsters.Add(new MonsterData
@@ -1087,17 +831,6 @@ public sealed class Game
         foreach (Item item in level.Items)
         {
             data.Items.Add(ItemData.From(item));
-        }
-
-        foreach (Trap trap in level.Traps)
-        {
-            data.Traps.Add(new TrapData
-            {
-                Type = trap.Type,
-                X = trap.X,
-                Y = trap.Y,
-                IsFound = trap.IsFound,
-            });
         }
 
         return data;
@@ -1122,11 +855,6 @@ public sealed class Game
 
         level.UpStairs = (data.UpStairsX, data.UpStairsY);
         level.DownStairs = (data.DownStairsX, data.DownStairsY);
-
-        foreach (SecretDoorData door in data.SecretDoors)
-        {
-            level.AddSecretDoor(door.X, door.Y, door.Disguise);
-        }
 
         foreach (MonsterData saved in data.Monsters)
         {
@@ -1155,11 +883,6 @@ public sealed class Game
         foreach (ItemData item in data.Items)
         {
             level.AddItem(item.ToItem());
-        }
-
-        foreach (TrapData trap in data.Traps)
-        {
-            level.AddTrap(new Trap(trap.Type, trap.X, trap.Y) { IsFound = trap.IsFound });
         }
 
         var state = new DungeonLevel(level);

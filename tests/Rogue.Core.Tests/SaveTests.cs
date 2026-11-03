@@ -10,7 +10,8 @@ public class SaveTests
     {
         var game = new Game(1234);
         game.Wait();
-        game.Player.Inventory.Add(Item.CreateFood(0, 0));
+        game.Player.Gold = 77;
+        game.Player.Potions = 3;
 
         SaveData data = game.Snapshot();
         Game restored = Game.Restore(data);
@@ -20,8 +21,8 @@ public class SaveTests
         Assert.Equal(game.Player.X, restored.Player.X);
         Assert.Equal(game.Player.Y, restored.Player.Y);
         Assert.Equal(game.Player.Hp, restored.Player.Hp);
-        Assert.Equal(game.Player.Food, restored.Player.Food);
-        Assert.Single(restored.Player.Inventory);
+        Assert.Equal(game.Player.Gold, restored.Player.Gold);
+        Assert.Equal(game.Player.Potions, restored.Player.Potions);
 
         for (int y = 0; y < game.Map.Height; y++)
         {
@@ -37,8 +38,8 @@ public class SaveTests
     {
         var game = new Game(42);
         game.Wait();
-        game.Player.Inventory.Add(Item.CreatePotion(PotionType.Healing, game.Knowledge, 0, 0));
-        game.Knowledge.Identify(PotionType.Healing);
+        game.Player.Scrolls = 2;
+        game.Player.SwordLevel = 1;
 
         string json = JsonSerializer.Serialize(game.Snapshot());
         SaveData? data = JsonSerializer.Deserialize<SaveData>(json);
@@ -46,44 +47,40 @@ public class SaveTests
         Assert.NotNull(data);
         Game restored = Game.Restore(data!);
 
-        Assert.True(restored.Knowledge.IsKnown(PotionType.Healing));
-        Assert.Single(restored.Player.Inventory);
+        Assert.Equal(2, restored.Player.Scrolls);
+        Assert.Equal(1, restored.Player.SwordLevel);
     }
 
     [Fact]
-    public void Restored_game_keeps_secret_doors_monsters_items_and_traps()
+    public void Restored_game_keeps_monsters_and_items()
     {
         var level = Level.FromAscii(
-            "#######",
-            "#.....#",
-            "#.....#",
-            "#.....#",
-            "#######");
+            "-------",
+            "|.....|",
+            "|.....|",
+            "|.....|",
+            "-------");
 
-        level.AddSecretDoor(1, 1, Tiles.WallVertical);
         level.AddMonster(new Monster(MonsterTable.All[0], 4, 2, 5) { IsAwake = true });
-        level.AddItem(Item.CreateFood(3, 2));
-        level.AddTrap(new Trap(TrapType.Arrow, 1, 2));
+        level.AddItem(Item.Potion(3, 2));
 
         var game = new Game(level, 2, 2);
         Game restored = Game.Restore(game.Snapshot());
 
-        Assert.True(restored.Map.IsSecretDoor(1, 1));
         Assert.Single(restored.Map.Monsters);
         Assert.Single(restored.Map.Items);
-        Assert.Single(restored.Map.Traps);
     }
 
     [Fact]
     public void Amulet_lets_the_player_win_on_level_one()
     {
         var level = Level.FromAscii(
-            "#####",
-            "#<..#",
-            "#####");
+            "-----",
+            "|<..|",
+            "-----");
 
         var game = new Game(level, 1, 1);
-        game.Player.Inventory.Add(Item.CreateAmulet(0, 0));
+        game.Player.HasAmulet = true;
 
         Assert.False(game.TryAscend());
         Assert.True(game.IsWon);

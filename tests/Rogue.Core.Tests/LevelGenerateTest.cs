@@ -20,24 +20,24 @@ public class LevelGeneratorTests
     }
 
     [Fact]
-    public void Every_passable_tile_is_reachable_when_secret_doors_count_as_open()
+    public void Every_walkable_tile_is_reachable()
     {
         var level = LevelGenerator.Generate(80, 22, 42);
 
-        int passable = 0;
+        int walkable = 0;
 
         for (int y = 0; y < level.Height; y++)
         {
             for (int x = 0; x < level.Width; x++)
             {
-                if (CanPass(level, x, y))
+                if (level.IsWalkable(x, y))
                 {
-                    passable++;
+                    walkable++;
                 }
             }
         }
 
-        Assert.Equal(passable, CountReachable(level, level.UpStairs));
+        Assert.Equal(walkable, CountReachable(level, level.UpStairs));
     }
 
     [Fact]
@@ -63,28 +63,22 @@ public class LevelGeneratorTests
         Assert.Contains(Tiles.Corridor, tiles);
         Assert.Contains(Tiles.WallHorizontal, tiles);
         Assert.Contains(Tiles.WallVertical, tiles);
-        Assert.True(tiles.Contains(Tiles.Door) || level.SecretDoors.Count > 0);
+        Assert.Contains(Tiles.Door, tiles);
     }
 
     [Fact]
-    public void Dark_rooms_and_secret_doors_appear_across_seeds()
+    public void Dark_rooms_appear_across_seeds()
     {
         bool dark = false;
-        bool secret = false;
 
-        for (int seed = 0; seed < 50 && !(dark && secret); seed++)
+        for (int seed = 0; seed < 50 && !dark; seed++)
         {
             var level = LevelGenerator.Generate(80, 22, seed);
-            dark |= level.Rooms.Any(room => room.IsDark);
-            secret |= level.SecretDoors.Count > 0;
+            dark = level.Rooms.Any(room => room.IsDark);
         }
 
         Assert.True(dark);
-        Assert.True(secret);
     }
-
-    private static bool CanPass(Level level, int x, int y)
-        => level.IsWalkable(x, y) || level.IsSecretDoor(x, y);
 
     private static int CountReachable(Level level, (int X, int Y) start)
     {
@@ -101,7 +95,7 @@ public class LevelGeneratorTests
 
             foreach ((int nx, int ny) in new[] { (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1) })
             {
-                if (!level.InBounds(nx, ny) || seen[ny, nx] || !CanPass(level, nx, ny))
+                if (!level.InBounds(nx, ny) || seen[ny, nx] || !level.IsWalkable(nx, ny))
                 {
                     continue;
                 }

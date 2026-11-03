@@ -3,21 +3,14 @@ namespace Rogue.Cli.Input;
 public static class KeyMap
 {
     public const string Hint =
-        "方向键移动 | g 获取 | i 查看背包 | q r e use | w W T equip | d drop | s 搜索 | < > 上下楼 | . wait";
+        "Arrows move  Enter stairs  q potion  r scroll  e food  u upgrades  . wait";
 
-
-
-    // 其余统一按大写转小写查
     private static readonly Dictionary<char, KeyBinding> Lower = new()
     {
-        ['g'] = new(GameAction.PickUp),
-        ['i'] = new(GameAction.Inventory),
         ['q'] = new(GameAction.Quaff),
         ['r'] = new(GameAction.Read),
         ['e'] = new(GameAction.Eat),
-        ['w'] = new(GameAction.Wield),
-        ['d'] = new(GameAction.Drop),
-        ['s'] = new(GameAction.Search),
+        ['u'] = new(GameAction.Upgrade),
         ['.'] = new(GameAction.Wait),
     };
 
@@ -27,7 +20,7 @@ public static class KeyMap
         [ConsoleKey.RightArrow] = new(GameAction.Move, 1, 0),
         [ConsoleKey.UpArrow] = new(GameAction.Move, 0, -1),
         [ConsoleKey.DownArrow] = new(GameAction.Move, 0, 1),
-        [ConsoleKey.Enter] = new(GameAction.UseStairs),
+        [ConsoleKey.Enter] = new(GameAction.Interact),
     };
 
     public static bool TryGetKey(ConsoleKey key, out KeyBinding binding)

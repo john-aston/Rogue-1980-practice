@@ -3,15 +3,10 @@ namespace Rogue.Cli.Input;
 public enum GameAction
 {
     Move,
-    Wait,
-    PickUp,
-    Inventory,
+    Interact,
     Quaff,
     Read,
     Eat,
-    Wield,
-    ToggleArmor,
-        Drop,
-    Search,
-    UseStairs,
+    Upgrade,
+    Wait,
 }

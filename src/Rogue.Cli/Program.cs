@@ -39,6 +39,7 @@ internal static class Program
         var store = new SaveStore();
 
         Game game;
+        bool resumed = false;
 
         if (store.TryLoad(out SaveData? save))
         {
@@ -46,7 +47,7 @@ internal static class Program
             {
                 game = Game.Restore(save!);
                 store.DeleteSave();
-                game.Notify("Welcome back.");
+                resumed = true;
             }
             catch (Exception)
             {
@@ -57,6 +58,15 @@ internal static class Program
         else
         {
             game = new Game();
+        }
+
+        if (!resumed)
+        {
+            ShowTitle(screen);
+        }
+        else
+        {
+            game.Notify("Welcome back.");
         }
 
         while (true)
@@ -76,14 +86,19 @@ internal static class Program
                     }
                     catch (Exception)
                     {
-                        // 存档失败不应该阻止退出
                     }
                 }
 
                 return;
             }
 
-                        KeyBinding? resolved = InputResolver.Resolve(key);
+            if (key.KeyChar == '?')
+            {
+                ShowHelp(screen, game);
+                continue;
+            }
+
+            KeyBinding? resolved = InputResolver.Resolve(key);
             if (resolved is not { } binding)
             {
                 continue;
@@ -95,63 +110,28 @@ internal static class Program
                     game.TryMove(binding.Dx, binding.Dy);
                     break;
 
-                case GameAction.Wait:
-                    game.Wait();
-                    break;
-
-                case GameAction.PickUp:
-                    game.PickUp();
-                    break;
-
-                case GameAction.Inventory:
-                    ShowInventory(screen, game, "Inventory");
+                case GameAction.Interact:
+                    game.UseStairs();
                     break;
 
                 case GameAction.Quaff:
-                    if (ChooseItem(screen, game, "Quaff which item?") is int quaff)
-                    {
-                        game.Quaff(quaff);
-                    }
+                    game.Quaff();
                     break;
 
                 case GameAction.Read:
-                    if (ChooseItem(screen, game, "Read which item?") is int read)
-                    {
-                        game.Read(read);
-                    }
+                    game.Read();
                     break;
 
                 case GameAction.Eat:
-                    if (ChooseItem(screen, game, "Eat which item?") is int eat)
-                    {
-                        game.Eat(eat);
-                    }
+                    game.Eat();
                     break;
 
-                case GameAction.Wield:
-                    if (ChooseItem(screen, game, "Wield which item?") is int wield)
-                    {
-                        game.Wield(wield);
-                    }
+                case GameAction.Upgrade:
+                    ShowUpgradeMenu(screen, game);
                     break;
 
-                case GameAction.ToggleArmor:
-                    game.ToggleArmor();
-                    break;
-    
-                case GameAction.Drop:
-                    if (ChooseItem(screen, game, "Drop which item?") is int drop)
-                    {
-                        game.Drop(drop);
-                    }
-                    break;
-
-                case GameAction.Search:
-                    game.Search();
-                    break;
-
-                case GameAction.UseStairs:
-                    game.UseStairs();
+                case GameAction.Wait:
+                    game.Wait();
                     break;
             }
 
@@ -169,61 +149,78 @@ internal static class Program
         }
     }
 
-    private static void Finish(SaveStore store, Game game, bool won)
+    private static void ShowTitle(Screen screen)
     {
-        try
-        {
-            store.DeleteSave();
-        }
-        catch (Exception)
-        {
-        }
-
-        var entry = new ScoreEntry
-        {
-            Name = Environment.UserName,
-            Score = game.Score,
-            Level = game.LevelNumber,
-            Gold = game.Player.Gold,
-            Experience = game.Player.Experience,
-            Won = won,
-            Date = DateTime.Now.ToString("yyyy-MM-dd"),
-        };
-
-        List<ScoreEntry> scores;
-
-        try
-        {
-            scores = store.AddScore(entry);
-        }
-        catch (Exception)
-        {
-            scores = new List<ScoreEntry> { entry };
-        }
-
-        RestoreTerminal();
-
-        Console.WriteLine();
-        Console.WriteLine(won
-            ? "You escaped the Dungeon of Doom with the Amulet of Yendor!"
-            : game.Message);
-        Console.WriteLine();
-        Console.WriteLine($"Score: {entry.Score}   Gold: {entry.Gold}   Exp: {entry.Experience}   Depth: {entry.Level}");
-        Console.WriteLine();
-        Console.WriteLine("High scores");
-        Console.WriteLine("-----------");
-
-        for (int i = 0; i < scores.Count; i++)
-        {
-            ScoreEntry score = scores[i];
-            string mark = score.Won ? "escaped" : $"level {score.Level}";
-            Console.WriteLine($"{i + 1,2}. {score.Name,-12} {score.Score,6}  {mark}");
-        }
-
-        Console.WriteLine();
-        Console.Write("Press any key to exit.");
+        screen.Clear();
+        screen.Write(24, 8, "R  O  G  U  E", ConsoleColor.White);
+        screen.Write(24, 10, "A tiny ASCII dungeon crawl", ConsoleColor.Gray);
+        screen.Write(20, 14, "Arrows move. Enter uses stairs.", ConsoleColor.Gray);
+        screen.Write(20, 15, "q potion   r scroll   e food   u upgrades", ConsoleColor.Gray);
+        screen.Write(24, 18, "Press any key to start.", ConsoleColor.Yellow);
+        screen.Present();
         Console.ReadKey(intercept: true);
     }
+
+    private static void ShowHelp(Screen screen, Game game)
+    {
+        Draw(screen, game);
+
+        screen.Write(2, 2, "Controls", ConsoleColor.White);
+        screen.Write(2, 4, "Arrows        move", ConsoleColor.Gray);
+        screen.Write(2, 5, "Enter         use stairs", ConsoleColor.Gray);
+        screen.Write(2, 6, "q             drink a healing potion", ConsoleColor.Gray);
+        screen.Write(2, 7, "r             read a teleport scroll", ConsoleColor.Gray);
+        screen.Write(2, 8, "e             eat a food ration", ConsoleColor.Gray);
+        screen.Write(2, 9, "u             spend gold on upgrades", ConsoleColor.Gray);
+        screen.Write(2, 10, ".             wait one turn", ConsoleColor.Gray);
+        screen.Write(2, 11, "Esc           save and quit", ConsoleColor.Gray);
+        screen.Write(2, 13, "! potion   ? scroll   % food   * gold   , Amulet", ConsoleColor.Gray);
+        screen.Write(2, 15, "Press any key to close.", ConsoleColor.Yellow);
+        screen.Present();
+        Console.ReadKey(intercept: true);
+    }
+
+    private static void ShowUpgradeMenu(Screen screen, Game game)
+    {
+        while (true)
+        {
+            Draw(screen, game);
+
+            Player player = game.Player;
+
+            screen.Write(2, 2, $"Gold: {player.Gold}", ConsoleColor.Yellow);
+
+            screen.Write(2, 4, "1) Sharpen sword   " + SwordCost(player), ConsoleColor.Gray);
+            screen.Write(2, 5, "2) Reinforce armor " + ArmorCost(player), ConsoleColor.Gray);
+            screen.Write(2, 6, $"3) Buy potion      25 gold   ({player.Potions}/{Player.PotionLimit})", ConsoleColor.Gray);
+            screen.Write(2, 7, $"4) Buy food        15 gold   ({player.Rations})", ConsoleColor.Gray);
+            screen.Write(2, 8, "5) +2 max HP       60 gold", ConsoleColor.Gray);
+            screen.Write(2, 10, "1-5 to buy, Esc to close.", ConsoleColor.Yellow);
+            screen.Present();
+
+            ConsoleKeyInfo key = Console.ReadKey(intercept: true);
+
+            if (key.Key == ConsoleKey.Escape)
+            {
+                return;
+            }
+
+            if (key.KeyChar is >= '1' and <= '5')
+            {
+                game.Buy(key.KeyChar - '0');
+            }
+        }
+    }
+
+    private static string SwordCost(Player player)
+        => player.SwordLevel >= Game.MaxUpgradeLevel
+            ? $"max (+{player.SwordLevel})"
+            : $"{Game.UpgradeCostBase * (player.SwordLevel + 1)} gold   (+{player.SwordLevel})";
+
+    private static string ArmorCost(Player player)
+        => player.ArmorLevel >= Game.MaxUpgradeLevel
+            ? $"max (+{player.ArmorLevel})"
+            : $"{Game.UpgradeCostBase * (player.ArmorLevel + 1)} gold   (+{player.ArmorLevel})";
 
     private static void Draw(Screen screen, Game game)
     {
@@ -255,16 +252,6 @@ internal static class Program
             screen.Put(item.X, item.Y + 1, item.Symbol, ItemColor(item));
         }
 
-        foreach (Trap trap in game.Map.Traps)
-        {
-            if (!trap.IsFound || !game.Sight.IsVisible(trap.X, trap.Y))
-            {
-                continue;
-            }
-
-            screen.Put(trap.X, trap.Y + 1, '^', ConsoleColor.DarkRed);
-        }
-
         foreach (Monster monster in game.Map.Monsters)
         {
             if (!game.Sight.IsVisible(monster.X, monster.Y))
@@ -279,66 +266,31 @@ internal static class Program
 
         Player player = game.Player;
         string status =
-            $"Level: {game.LevelNumber}  Gold: {player.Gold}  Hp: {player.Hp}({player.MaxHp})  " +
-            $"Str: {player.Strength}  Arm: {player.Armor}  Exp: {player.Level}/{player.Experience}  Turn: {game.Turn}";
+            $"D{game.LevelNumber} HP[{HpBar(player)}]{player.Hp}/{player.MaxHp} " +
+            $"G{player.Gold} Food{player.Food} P{player.Potions}/{Player.PotionLimit} " +
+            $"S{player.Scrolls} R{player.Rations} Sw+{player.SwordLevel} AC{player.Armor}";
 
-        screen.Write(0, 0, status, ConsoleColor.Gray);
+        screen.Write(0, 0, status, player.Hp * 3 <= player.MaxHp ? ConsoleColor.Red : ConsoleColor.Gray);
 
         string message = game.Message.Length > 0 ? game.Message : KeyMap.Hint;
-        screen.Write(0, 23, message, ConsoleColor.Gray);
+        ConsoleColor messageColor = game.Tone switch
+        {
+            MessageTone.Good => ConsoleColor.Green,
+            MessageTone.Bad => ConsoleColor.Red,
+            _ => ConsoleColor.Gray,
+        };
 
+        screen.Write(0, 23, message, messageColor);
         screen.Present();
     }
 
-    private static ConsoleKeyInfo ShowInventory(Screen screen, Game game, string prompt)
+    private static string HpBar(Player player)
     {
-        Draw(screen, game);
+        int filled = player.MaxHp <= 0
+            ? 0
+            : Math.Clamp(player.Hp * 10 / player.MaxHp, 0, 10);
 
-        screen.Write(0, 1, prompt, ConsoleColor.Gray);
-
-        IReadOnlyList<Item> inventory = game.Player.Inventory;
-
-        if (inventory.Count == 0)
-        {
-            screen.Write(0, 2, "Your pack is empty.", ConsoleColor.Gray);
-        }
-
-        for (int i = 0; i < inventory.Count; i++)
-        {
-            int column = i / 13;
-            int row = 2 + i % 13;
-
-            string name = inventory[i].DisplayName(game.Knowledge);
-            if (name.Length > 36)
-            {
-                name = name[..36];
-            }
-
-            screen.Write(column * 40, row, $"{(char)('a' + i)}) {name}", ConsoleColor.Gray);
-        }
-
-        screen.Write(0, 23, "Letter to choose, Esc to cancel.", ConsoleColor.Gray);
-        screen.Present();
-
-        return Console.ReadKey(intercept: true);
-    }
-
-    private static int? ChooseItem(Screen screen, Game game, string prompt)
-    {
-        if (game.Player.Inventory.Count == 0)
-        {
-            game.Notify("Your pack is empty.");
-            return null;
-        }
-
-        ConsoleKeyInfo key = ShowInventory(screen, game, prompt);
-        if (key.Key == ConsoleKey.Escape)
-        {
-            return null;
-        }
-
-        int index = char.ToLowerInvariant(key.KeyChar) - 'a';
-        return index >= 0 && index < game.Player.Inventory.Count ? index : null;
+        return new string('#', filled) + new string('-', 10 - filled);
     }
 
     private static ConsoleColor TileColor(char tile) => tile switch
@@ -367,6 +319,60 @@ internal static class Program
         _ => ConsoleColor.Gray,
     };
 
+    private static void Finish(SaveStore store, Game game, bool won)
+    {
+        try
+        {
+            store.DeleteSave();
+        }
+        catch (Exception)
+        {
+        }
+
+        var entry = new ScoreEntry
+        {
+            Name = Environment.UserName,
+            Score = game.Score,
+            Level = game.LevelNumber,
+            Gold = game.Player.Gold,
+            Won = won,
+            Date = DateTime.Now.ToString("yyyy-MM-dd"),
+        };
+
+        List<ScoreEntry> scores;
+
+        try
+        {
+            scores = store.AddScore(entry);
+        }
+        catch (Exception)
+        {
+            scores = new List<ScoreEntry> { entry };
+        }
+
+        RestoreTerminal();
+
+        Console.WriteLine();
+        Console.WriteLine(won
+            ? "You escaped the Dungeon of Doom with the Amulet of Yendor!"
+            : game.Message);
+        Console.WriteLine();
+        Console.WriteLine($"Score: {entry.Score}   Gold: {entry.Gold}   Depth: {entry.Level}");
+        Console.WriteLine();
+        Console.WriteLine("High scores");
+        Console.WriteLine("-----------");
+
+        for (int i = 0; i < scores.Count; i++)
+        {
+            ScoreEntry score = scores[i];
+            string mark = score.Won ? "escaped" : $"level {score.Level}";
+            Console.WriteLine($"{i + 1,2}. {score.Name,-12} {score.Score,6}  {mark}");
+        }
+
+        Console.WriteLine();
+        Console.Write("Press any key to exit.");
+        Console.ReadKey(intercept: true);
+    }
 
     private static bool TerminalTooSmall()
     {

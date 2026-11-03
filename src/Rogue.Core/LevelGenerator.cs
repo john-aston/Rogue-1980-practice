@@ -9,7 +9,6 @@ public static class LevelGenerator
     private const int GridSize = 3;
     private const int MinRoomSize = 4;
     private const int DarkRoomChance = 10;
-    private const int SecretDoorChance = 20;
 
     public static Level Generate(int width, int height, int seed)
     {
@@ -290,8 +289,8 @@ public static class LevelGenerator
         int x2 = right.X;
         int midX = (x1 + x2) / 2;
 
-        PlaceDoor(level, x1, y1, Tiles.WallVertical, rng);
-        PlaceDoor(level, x2, y2, Tiles.WallVertical, rng);
+        PlaceDoor(level, x1, y1);
+        PlaceDoor(level, x2, y2);
 
         for (int x = x1 + 1; x <= midX; x++)
         {
@@ -323,8 +322,8 @@ public static class LevelGenerator
         int y2 = bottom.Y;
         int midY = (y1 + y2) / 2;
 
-        PlaceDoor(level, x1, y1, Tiles.WallHorizontal, rng);
-        PlaceDoor(level, x2, y2, Tiles.WallHorizontal, rng);
+        PlaceDoor(level, x1, y1);
+        PlaceDoor(level, x2, y2);
 
         for (int y = y1 + 1; y <= midY; y++)
         {
@@ -342,17 +341,9 @@ public static class LevelGenerator
         }
     }
 
-    /// <summary>20% 的机会把门伪装成墙（秘密门）。</summary>
-    private static void PlaceDoor(Level level, int x, int y, char disguise, Random rng)
+    private static void PlaceDoor(Level level, int x, int y)
     {
-        if (rng.Next(100) < SecretDoorChance)
-        {
-            level.AddSecretDoor(x, y, disguise);
-        }
-        else
-        {
-            level.Set(x, y, Tiles.Door);
-        }
+        level.Set(x, y, Tiles.Door);
     }
 
     private static void PlaceStairs(Level level, Room?[,] grid, Random rng)

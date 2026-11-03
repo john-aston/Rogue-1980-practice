@@ -9,11 +9,11 @@ public class MonsterTests
 
     private static Level BuildArena()
         => Level.FromAscii(
-            "#######",
-            "#.....#",
-            "#.....#",
-            "#.....#",
-            "#######");
+            "-------",
+            "|.....|",
+            "|.....|",
+            "|.....|",
+            "-------");
 
     [Fact]
     public void Spawner_places_monsters_on_floor_but_never_on_stairs()
@@ -36,13 +36,13 @@ public class MonsterTests
     }
 
     [Fact]
-    public void Attacking_an_adjacent_monster_eventually_kills_it_and_gives_experience()
+    public void Attacking_an_adjacent_monster_eventually_kills_it_and_gives_gold()
     {
         Level level = BuildArena();
         level.AddMonster(new Monster(Bat, 3, 2, 5));
 
         var game = new Game(level, 2, 2);
-        game.Player.Armor = 100;   // 让怪物打不中，只测玩家输出
+        game.Player.Armor = 100;
 
         for (int i = 0; i < 100 && level.Monsters.Count > 0; i++)
         {
@@ -50,7 +50,7 @@ public class MonsterTests
         }
 
         Assert.Empty(level.Monsters);
-        Assert.True(game.Player.Experience > 0);
+        Assert.True(game.Player.Gold > 0);
     }
 
     [Fact]
@@ -85,24 +85,5 @@ public class MonsterTests
         }
 
         Assert.True(game.IsDead);
-    }
-
-    [Fact]
-    public void Experience_raises_the_player_level()
-    {
-        Level level = BuildArena();
-        level.AddMonster(new Monster(Bat, 3, 2, 3));
-
-        var game = new Game(level, 2, 2);
-        game.Player.Armor = 100;
-        game.Player.Experience = 4;   // 差一点升级
-
-        for (int i = 0; i < 100 && level.Monsters.Count > 0; i++)
-        {
-            game.TryMove(1, 0);
-        }
-
-        Assert.Equal(2, game.Player.Level);
-        Assert.True(game.Player.MaxHp > 12);
     }
 }

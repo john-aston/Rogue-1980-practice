@@ -1,20 +1,13 @@
 namespace Rogue.Core;
 
-//绘制地牢的规则，提供画布和画笔
+/// <summary>一层地牢：格子、房间、物品、怪物、楼梯。</summary>
 public sealed class Level
 {
-    //外部碰不到、引用本身也不许换，只能在构造函数里 new 一次。
     private readonly char[,] _tiles;
     private readonly List<Room> _rooms = new();
-    private readonly HashSet<(int X, int Y)> _secretDoors = new();
     private readonly List<Item> _items = new();
     private readonly List<Monster> _monsters = new();
-    private readonly List<Trap> _traps = new();
-    public IReadOnlyList<Monster> Monsters => _monsters;
-    public IReadOnlyList<Item> Items => _items;
-    public IReadOnlyList<Trap> Traps => _traps;
 
-    //建一张新地图，先全部填成“石头”，当白纸用。
     public Level(int width, int height)
     {
         Width = width;
@@ -23,24 +16,21 @@ public sealed class Level
         Fill(Tiles.Rock);
     }
 
-    //地图尺寸建好后固定
-    public int Width { get; }   //对外公开一个建好后就不能改的宽度值，只能读取Level.Width，不能改Level._width
-    public int Height { get; }  //同上
+    public int Width { get; }
+    public int Height { get; }
 
     public IReadOnlyList<Room> Rooms => _rooms;
-    public IReadOnlySet<(int X, int Y)> SecretDoors => _secretDoors;
+    public IReadOnlyList<Item> Items => _items;
+    public IReadOnlyList<Monster> Monsters => _monsters;
 
-    /// <summary>楼梯位置；还没放楼梯时是 (-1, -1)。</summary>
     public (int X, int Y) UpStairs { get; set; } = (-1, -1);
     public (int X, int Y) DownStairs { get; set; } = (-1, -1);
 
     public char this[int x, int y] => _tiles[y, x];
 
-    //边界检查
     public bool InBounds(int x, int y)
         => x >= 0 && y >= 0 && x < Width && y < Height;
 
-    //可走检查
     public bool IsWalkable(int x, int y)
         => InBounds(x, y) && Tiles.IsWalkable(this[x, y]);
 
@@ -72,7 +62,7 @@ public sealed class Level
         }
     }
 
-    //画一个带墙的房间
+    /// <summary>画一个带墙的房间，内部填成地面。</summary>
     public void DrawRoom(int x, int y, int width, int height)
     {
         for (int col = x; col < x + width; col++)
@@ -95,7 +85,6 @@ public sealed class Level
 
     public void AddRoom(Room room) => _rooms.Add(room);
 
-    /// <summary>玩家站在哪个房间的内部；走廊和门口返回 null。</summary>
     public Room? RoomAt(int x, int y)
     {
         foreach (Room room in _rooms)
@@ -109,26 +98,6 @@ public sealed class Level
         return null;
     }
 
-    public bool IsSecretDoor(int x, int y) => _secretDoors.Contains((x, y));
-
-    /// <summary>把一扇门伪装成墙，并记下它的真实身份。</summary>
-    public void AddSecretDoor(int x, int y, char disguise)
-    {
-        Set(x, y, disguise);
-        _secretDoors.Add((x, y));
-    }
-
-    /// <summary>揭开秘密门。返回是否真的揭开了一扇。</summary>
-    public bool RevealSecretDoor(int x, int y)
-    {
-        if (!_secretDoors.Remove((x, y)))
-        {
-            return false;
-        }
-
-        Set(x, y, Tiles.Door);
-        return true;
-    }
     public void AddMonster(Monster monster) => _monsters.Add(monster);
 
     public void RemoveMonster(Monster monster) => _monsters.Remove(monster);
@@ -146,7 +115,7 @@ public sealed class Level
         return null;
     }
 
-        public void AddItem(Item item) => _items.Add(item);
+    public void AddItem(Item item) => _items.Add(item);
 
     public void RemoveItem(Item item) => _items.Remove(item);
 
@@ -157,23 +126,6 @@ public sealed class Level
             if (item.X == x && item.Y == y)
             {
                 return item;
-            }
-        }
-
-        return null;
-    }
-
-    public void AddTrap(Trap trap) => _traps.Add(trap);
-
-    public void RemoveTrap(Trap trap) => _traps.Remove(trap);
-
-    public Trap? TrapAt(int x, int y)
-    {
-        foreach (Trap trap in _traps)
-        {
-            if (trap.X == x && trap.Y == y)
-            {
-                return trap;
             }
         }
 
