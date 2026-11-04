@@ -15,6 +15,10 @@
 - 终端至少 80 列 × 24 行，支持 ANSI 颜色
 - macOS / Linux / Windows Terminal
 
+## 画面展示
+<img width="400" height="251" alt="录屏2026-11-04 20 26 53" src="https://github.com/user-attachments/assets/a530accb-e68f-438e-9ef0-6e040dcafde3" />
+
+
 ## 本地开始
 
 cd /Users/john/Desktop/csharp/Rogue
