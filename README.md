@@ -15,13 +15,10 @@
 - 终端至少 80 列 × 24 行，支持 ANSI 颜色
 - macOS / Linux / Windows Terminal
 
-## 快速开始
+## 本地开始
 
-```bash
-git clone https://github.com/john-aston/Rogue-1980-practice.git
-cd Rogue-1980-practice
+cd /Users/john/Desktop/csharp/Rogue
 dotnet run --project src/Rogue.Cli
-```
 
 macOS 也可以直接双击仓库根目录的 `play.command`。
 
